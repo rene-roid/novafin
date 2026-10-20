@@ -10,7 +10,19 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.material3.ripple
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.composed
+import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -24,15 +36,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import xyz.yuuki.novafin.R
 
-// From the icon: a near-black night sky, violet haze, the lit edge of the moon.
-val Bg = Color(0xFF0A0915)
-val Raised = Color(0xFF15122A)
-val Raised2 = Color(0xFF211C3E)
-val Violet = Color(0xFF9B87FF)
+// Neutral and dark: near-black page, #2b2b2b surfaces, the moon's cream for the main actions.
+val Bg = Color(0xFF0E0E0E)
+val Raised = Color(0xFF1C1C1C)
+val Raised2 = Color(0xFF2B2B2B)
+/** Highlights that aren't the main action: section labels, selected states, watched marks. */
+val Accent = Color(0xFFDADADA)
 val Moon = Color(0xFFFFE9D2)
 val Dusk = Color(0xFFD8A0AE)
-val Sub = Color(0xFFB9B3D6)
-val Faint = Color(0xFF7D769E)
+val Sub = Color(0xFFB0B0B0)
+val Faint = Color(0xFF777777)
 
 // Static instances of the variable font: some skins (HyperOS) ignore font variation settings and draw everything thin.
 val Figtree = FontFamily(
@@ -66,9 +79,9 @@ fun NovafinTheme(content: @Composable () -> Unit) = MaterialTheme(
     colorScheme = darkColorScheme(
         primary = Moon,
         onPrimary = Bg,
-        secondary = Violet,
-        onSecondary = Color.White,
-        secondaryContainer = Color(0xFF3A2F7A),
+        secondary = Accent,
+        onSecondary = Bg,
+        secondaryContainer = Raised2,
         onSecondaryContainer = Color.White,
         tertiary = Dusk,
         background = Bg,
@@ -82,7 +95,7 @@ fun NovafinTheme(content: @Composable () -> Unit) = MaterialTheme(
         surfaceContainerHigh = Raised2,
         surfaceContainerHighest = Raised2,
         outline = Faint,
-        outlineVariant = Color(0xFF2E2852),
+        outlineVariant = Color(0xFF333333),
     ),
     typography = typography,
 ) {
@@ -105,37 +118,43 @@ fun formatBytes(b: Long): String = when {
     else -> "%.0f KB".format(b / 1024.0)
 }
 
-/** Moonlight on text: white into the moon's warm rim and the dusk pink of the icon. */
-val MoonText = Brush.horizontalGradient(listOf(Color.White, Moon, Color(0xFFF2B8A8), Dusk))
-
-/** A soft coloured halo around [shape], like the light around the crescent. */
-fun Modifier.glow(color: Color = Moon, radius: Dp = 18.dp, shape: Shape = RoundedCornerShape(50)) =
+/** A soft coloured halo around [shape]; kept for the one main action on a page. */
+fun Modifier.glow(color: Color = Moon.copy(alpha = .55f), radius: Dp = 14.dp, shape: Shape = RoundedCornerShape(50)) =
     shadow(radius, shape, clip = false, ambientColor = color, spotColor = color)
 
+/** The app's backdrop: plain near-black. */
+@Composable
+fun NightSky(modifier: Modifier = Modifier) = Canvas(modifier) { drawRect(Bg) }
+
 /**
- * The app's backdrop: the night sky from the icon. Near-black, a violet haze from the top corner,
- * a little dusk from below, and a scatter of faint stars, a few of them twinkling with a soft cross.
+ * Light from the artwork: a tiny, heavily blurred copy of [img] behind the page, so each show tints
+ * its own page in its colours, fading into the dark further down.
  */
 @Composable
-fun NightSky(modifier: Modifier = Modifier) {
-    val stars = remember {
-        val r = java.util.Random(7)
-        List(55) { Triple(Offset(r.nextFloat(), r.nextFloat()), .4f + r.nextFloat() * 1.1f, .08f + r.nextFloat() * .4f) }
-    }
-    Canvas(modifier) {
-        drawRect(Bg)
-        drawRect(Brush.radialGradient(listOf(Violet.copy(alpha = .20f), Color.Transparent), Offset(size.width * .82f, -size.height * .05f), size.maxDimension * .75f))
-        drawRect(Brush.radialGradient(listOf(Dusk.copy(alpha = .07f), Color.Transparent), Offset(size.width * .05f, size.height * 1.05f), size.maxDimension * .6f))
-        for ((p, radius, a) in stars) {
-            val c = Offset(p.x * size.width, p.y * size.height)
-            drawCircle(Color.White.copy(alpha = a), radius.dp.toPx(), c)
-            if (radius > 1.35f) {
-                // The brightest few get a glow and a faint cross.
-                drawCircle(Brush.radialGradient(listOf(Moon.copy(alpha = a * .5f), Color.Transparent), c, 7.dp.toPx()), 7.dp.toPx(), c)
-                val l = 6.dp.toPx()
-                drawLine(Moon.copy(alpha = a * .6f), c.copy(x = c.x - l), c.copy(x = c.x + l), .6.dp.toPx())
-                drawLine(Moon.copy(alpha = a * .6f), c.copy(y = c.y - l), c.copy(y = c.y + l), .6.dp.toPx())
-            }
-        }
-    }
+fun AmbientLight(img: xyz.yuuki.novafin.Img?, modifier: Modifier = Modifier) {
+    img ?: return
+    coil3.compose.AsyncImage(
+        xyz.yuuki.novafin.App.it.api.imageUrl(img.id, img.type, 64, img.tag), null,
+        modifier
+            .graphicsLayer(compositingStrategy = androidx.compose.ui.graphics.CompositingStrategy.Offscreen, alpha = .55f)
+            .then(if (android.os.Build.VERSION.SDK_INT >= 31) Modifier.blur(48.dp, BlurredEdgeTreatment.Unbounded) else Modifier)
+            .drawWithContent {
+                drawContent()
+                drawRect(Brush.verticalGradient(0f to Color.Black, .35f to Color.Black.copy(alpha = .7f), 1f to Color.Transparent), blendMode = androidx.compose.ui.graphics.BlendMode.DstIn)
+            },
+        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+    )
+}
+
+/** Moves with the top of [list], so a backdrop effect scrolls away with the page. */
+fun Modifier.scrollsWith(list: androidx.compose.foundation.lazy.LazyListState) = graphicsLayer {
+    translationY = if (list.firstVisibleItemIndex == 0) -list.firstVisibleItemScrollOffset.toFloat() else -size.height
+}
+
+/** Cards and tiles ease down a little while pressed. */
+fun Modifier.pressable(onClick: () -> Unit): Modifier = composed {
+    val source = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) .96f else 1f, spring(stiffness = Spring.StiffnessMediumLow), label = "press")
+    graphicsLayer { scaleX = scale; scaleY = scale }.clickable(source, ripple(color = Moon), onClick = onClick)
 }
