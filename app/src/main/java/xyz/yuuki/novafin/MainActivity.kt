@@ -26,7 +26,6 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
@@ -36,7 +35,6 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.DownloadForOffline
@@ -81,9 +79,7 @@ import xyz.yuuki.novafin.ui.LocalNav
 import xyz.yuuki.novafin.ui.LoginScreen
 import xyz.yuuki.novafin.ui.Moon
 import xyz.yuuki.novafin.ui.Nav
-import xyz.yuuki.novafin.ui.NightSky
 import xyz.yuuki.novafin.ui.NovafinTheme
-import xyz.yuuki.novafin.ui.Violet
 import xyz.yuuki.novafin.ui.Raised
 import xyz.yuuki.novafin.ui.Raised2
 import xyz.yuuki.novafin.ui.Route
@@ -102,8 +98,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             NovafinTheme {
                 val loggedIn by App.it.loggedIn.collectAsStateWithLifecycle()
-                Box(Modifier.fillMaxSize()) {
-                    NightSky(Modifier.fillMaxSize())
+                Box(Modifier.fillMaxSize().background(Bg)) {
                     if (loggedIn) Shell() else LoginScreen()
                 }
             }
@@ -137,18 +132,18 @@ private fun Shell() {
         Row(Modifier.fillMaxSize()) {
             if (tablet) NavigationRail(
                 Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Vertical)),
-                containerColor = Bg.copy(alpha = .55f),
+                containerColor = Bg,
             ) {
                 Spacer(Modifier.padding(top = 8.dp))
                 for (t in tabs) NavigationRailItem(
                     root == t.route, { nav.tab(t.route) }, { Icon(if (root == t.route) t.selectedIcon else t.icon, t.label) }, label = { Text(t.label) },
-                    colors = NavigationRailItemDefaults.colors(indicatorColor = Violet.copy(alpha = .22f), selectedIconColor = Moon, selectedTextColor = Moon, unselectedIconColor = Sub, unselectedTextColor = Sub),
+                    colors = NavigationRailItemDefaults.colors(indicatorColor = Raised2, selectedIconColor = Moon, selectedTextColor = Moon, unselectedIconColor = Sub, unselectedTextColor = Sub),
                 )
                 Spacer(Modifier.weight(1f))
                 NavigationRailItem(
                     root == Route.Settings, { nav.tab(Route.Settings) },
                     { Icon(if (root == Route.Settings) Icons.Rounded.Settings else Icons.Outlined.Settings, "Settings") }, label = { Text("Settings") },
-                    colors = NavigationRailItemDefaults.colors(indicatorColor = Violet.copy(alpha = .22f), selectedIconColor = Moon, selectedTextColor = Moon, unselectedIconColor = Sub, unselectedTextColor = Sub),
+                    colors = NavigationRailItemDefaults.colors(indicatorColor = Raised2, selectedIconColor = Moon, selectedTextColor = Moon, unselectedIconColor = Sub, unselectedTextColor = Sub),
                 )
             }
             Column(Modifier.weight(1f)) {
@@ -163,7 +158,7 @@ private fun Shell() {
                     // Pages scroll under the status bar; keep its icons readable.
                     if (online) Box(
                         Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars).zIndex(1f)
-                            .background(Brush.verticalGradient(listOf(Bg.copy(alpha = .8f), Color.Transparent))),
+                            .background(Brush.verticalGradient(listOf(Bg.copy(alpha = .92f), Bg.copy(alpha = .7f)))),
                     )
                     NavDisplay(
                         backStack = nav.stack,
@@ -186,12 +181,10 @@ private fun Shell() {
                         },
                     )
                 }
-                // A thin violet rim of light on top of the bar.
-                if (!tablet) Box(Modifier.fillMaxWidth().height(1.dp).background(Brush.horizontalGradient(listOf(Color.Transparent, Violet.copy(alpha = .5f), Color.Transparent))))
-                if (!tablet) NavigationBar(containerColor = Bg.copy(alpha = .94f)) {
+                if (!tablet) NavigationBar(containerColor = Raised.copy(alpha = .97f)) {
                     for (t in tabs) NavigationBarItem(
                         root == t.route, { nav.tab(t.route) }, { Icon(if (root == t.route) t.selectedIcon else t.icon, t.label) }, label = { Text(t.label) },
-                        colors = NavigationBarItemDefaults.colors(indicatorColor = Violet.copy(alpha = .22f), selectedIconColor = Moon, selectedTextColor = Moon, unselectedIconColor = Sub, unselectedTextColor = Sub),
+                        colors = NavigationBarItemDefaults.colors(indicatorColor = Raised2, selectedIconColor = Moon, selectedTextColor = Moon, unselectedIconColor = Sub, unselectedTextColor = Sub),
                     )
                 }
             }

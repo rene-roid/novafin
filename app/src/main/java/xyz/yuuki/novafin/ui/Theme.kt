@@ -6,17 +6,7 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.runtime.remember
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -24,11 +14,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import xyz.yuuki.novafin.R
 
-// From the icon: a near-black night sky, violet haze, the lit edge of the moon.
-val Bg = Color(0xFF0A0915)
-val Raised = Color(0xFF15122A)
-val Raised2 = Color(0xFF211C3E)
-val Violet = Color(0xFF9B87FF)
+// From the icon: night sky, violet glow, the moon.
+val Bg = Color(0xFF16132B)
+val Raised = Color(0xFF221D3D)
+val Raised2 = Color(0xFF2D2750)
+val Violet = Color(0xFF8F7BFF)
 val Moon = Color(0xFFFFE9D2)
 val Dusk = Color(0xFFD8A0AE)
 val Sub = Color(0xFFB9B3D6)
@@ -68,7 +58,7 @@ fun NovafinTheme(content: @Composable () -> Unit) = MaterialTheme(
         onPrimary = Bg,
         secondary = Violet,
         onSecondary = Color.White,
-        secondaryContainer = Color(0xFF3A2F7A),
+        secondaryContainer = Color(0xFF4B3F94),
         onSecondaryContainer = Color.White,
         tertiary = Dusk,
         background = Bg,
@@ -82,7 +72,7 @@ fun NovafinTheme(content: @Composable () -> Unit) = MaterialTheme(
         surfaceContainerHigh = Raised2,
         surfaceContainerHighest = Raised2,
         outline = Faint,
-        outlineVariant = Color(0xFF2E2852),
+        outlineVariant = Color(0xFF3A3360),
     ),
     typography = typography,
 ) {
@@ -103,39 +93,4 @@ fun formatBytes(b: Long): String = when {
     b >= 1L shl 30 -> "%.1f GB".format(b / (1L shl 30).toDouble())
     b >= 1L shl 20 -> "%.0f MB".format(b / (1L shl 20).toDouble())
     else -> "%.0f KB".format(b / 1024.0)
-}
-
-/** Moonlight on text: white into the moon's warm rim and the dusk pink of the icon. */
-val MoonText = Brush.horizontalGradient(listOf(Color.White, Moon, Color(0xFFF2B8A8), Dusk))
-
-/** A soft coloured halo around [shape], like the light around the crescent. */
-fun Modifier.glow(color: Color = Moon, radius: Dp = 18.dp, shape: Shape = RoundedCornerShape(50)) =
-    shadow(radius, shape, clip = false, ambientColor = color, spotColor = color)
-
-/**
- * The app's backdrop: the night sky from the icon. Near-black, a violet haze from the top corner,
- * a little dusk from below, and a scatter of faint stars, a few of them twinkling with a soft cross.
- */
-@Composable
-fun NightSky(modifier: Modifier = Modifier) {
-    val stars = remember {
-        val r = java.util.Random(7)
-        List(55) { Triple(Offset(r.nextFloat(), r.nextFloat()), .4f + r.nextFloat() * 1.1f, .08f + r.nextFloat() * .4f) }
-    }
-    Canvas(modifier) {
-        drawRect(Bg)
-        drawRect(Brush.radialGradient(listOf(Violet.copy(alpha = .20f), Color.Transparent), Offset(size.width * .82f, -size.height * .05f), size.maxDimension * .75f))
-        drawRect(Brush.radialGradient(listOf(Dusk.copy(alpha = .07f), Color.Transparent), Offset(size.width * .05f, size.height * 1.05f), size.maxDimension * .6f))
-        for ((p, radius, a) in stars) {
-            val c = Offset(p.x * size.width, p.y * size.height)
-            drawCircle(Color.White.copy(alpha = a), radius.dp.toPx(), c)
-            if (radius > 1.35f) {
-                // The brightest few get a glow and a faint cross.
-                drawCircle(Brush.radialGradient(listOf(Moon.copy(alpha = a * .5f), Color.Transparent), c, 7.dp.toPx()), 7.dp.toPx(), c)
-                val l = 6.dp.toPx()
-                drawLine(Moon.copy(alpha = a * .6f), c.copy(x = c.x - l), c.copy(x = c.x + l), .6.dp.toPx())
-                drawLine(Moon.copy(alpha = a * .6f), c.copy(y = c.y - l), c.copy(y = c.y + l), .6.dp.toPx())
-            }
-        }
-    }
 }

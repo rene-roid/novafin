@@ -7,7 +7,6 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -49,10 +48,6 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -183,9 +178,6 @@ fun Picture(img: Img?, width: Dp, modifier: Modifier = Modifier, scale: ContentS
 
 private val cardShape = RoundedCornerShape(8.dp)
 
-/** Moonlight catching the top edge of a card, like the crescent's rim. */
-private val rim = Brush.verticalGradient(listOf(Moon.copy(alpha = .28f), Violet.copy(alpha = .08f), Color.Transparent))
-
 @Composable
 fun Badges(item: Item, modifier: Modifier = Modifier) {
     val dl by App.it.downloads.states.collectAsStateWithLifecycle()
@@ -214,7 +206,7 @@ fun ProgressLine(item: Item, modifier: Modifier = Modifier) {
 @Composable
 fun PosterCard(item: Item, width: Dp, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Column(modifier.width(width).clip(cardShape).clickable(onClick = onClick)) {
-        Box(Modifier.fillMaxWidth().aspectRatio(2f / 3).clip(cardShape).border(1.dp, rim, cardShape)) {
+        Box(Modifier.fillMaxWidth().aspectRatio(2f / 3).clip(cardShape)) {
             Picture(if (item.isEpisode) item.poster else item.poster ?: item.thumb, width, Modifier.fillMaxSize())
             Badges(item, Modifier.align(Alignment.TopEnd))
             ProgressLine(item, Modifier.align(Alignment.BottomCenter))
@@ -231,7 +223,7 @@ fun PosterCard(item: Item, width: Dp, modifier: Modifier = Modifier, onClick: ()
 @Composable
 fun ThumbCard(item: Item, width: Dp, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Column(modifier.width(width).clip(cardShape).clickable(onClick = onClick)) {
-        Box(Modifier.fillMaxWidth().aspectRatio(16f / 9).clip(cardShape).border(1.dp, rim, cardShape)) {
+        Box(Modifier.fillMaxWidth().aspectRatio(16f / 9).clip(cardShape)) {
             Picture(item.thumb ?: item.poster, width, Modifier.fillMaxSize())
             Badges(item, Modifier.align(Alignment.TopEnd))
             ProgressLine(item, Modifier.align(Alignment.BottomCenter))
@@ -304,11 +296,8 @@ fun Empty(message: String, action: String? = null, onAction: () -> Unit = {}) {
     }
 }
 
-/** Fades the bottom of a backdrop out, so it melts into the night sky behind the page. */
-fun Modifier.fadeOut() = graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen).drawWithContent {
-    drawContent()
-    drawRect(Brush.verticalGradient(0f to Color.Black, .45f to Color.Black, 1f to Color.Transparent), blendMode = BlendMode.DstIn)
-}
+/** Fades the bottom of a backdrop into the page. */
+fun Modifier.scrim() = background(Brush.verticalGradient(0f to Color.Transparent, .55f to Bg.copy(alpha = .6f), 1f to Bg))
 
 @Composable
 fun BoxScope.TopScrim() = Box(Modifier.fillMaxWidth().height(96.dp).align(Alignment.TopCenter).background(Brush.verticalGradient(listOf(Bg.copy(alpha = .7f), Color.Transparent))))

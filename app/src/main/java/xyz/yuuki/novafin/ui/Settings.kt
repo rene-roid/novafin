@@ -88,7 +88,7 @@ fun PageTop(title: String) {
     val nav = LocalNav.current
     Row(Modifier.windowInsetsPadding(WindowInsets.statusBars).padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
         if (nav.stack.size > 1) IconButton({ nav.back() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }
-        Text(title, Modifier.padding(start = 12.dp), style = MaterialTheme.typography.headlineSmall.copy(brush = MoonText))
+        Text(title, Modifier.padding(start = 12.dp), style = MaterialTheme.typography.headlineSmall)
     }
 }
 
