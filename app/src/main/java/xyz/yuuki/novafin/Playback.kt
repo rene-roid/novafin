@@ -156,9 +156,12 @@ class Playback(private val app: App) {
                 val remote = info.playbackType == DeviceInfo.PLAYBACK_TYPE_REMOTE
                 if (remote == casting.value) return
                 casting.value = remote
-                // Back from the TV: reload locally with the right tracks and method at the same spot.
                 val n = now.value
-                if (!remote && n != null) load(n.item, player.currentPosition, n.audio, n.sub, n.quality)
+                if (remote || n == null) return
+                // Back from the TV: carry on here only when asked to. Casting stopped any other way
+                // (from the cast menu, the TV, a dropped network) closes the media instead of playing from the phone.
+                if (playingHere) load(n.item, player.currentPosition, n.audio, n.sub, n.quality) else stop()
+                playingHere = false
             }
         })
 
@@ -526,7 +529,12 @@ class Playback(private val app: App) {
     fun castDeviceName(): String? = runCatching { androidx.media3.cast.Cast.getSingletonInstance(app).currentCastSession?.castDevice?.friendlyName }.getOrNull()
 
     /** Leaves the TV and carries on playing on this device from the same spot. */
-    fun playHere() = runCatching { androidx.media3.cast.Cast.getSingletonInstance(app).endCurrentSession(true) }
+    fun playHere() {
+        playingHere = true
+        runCatching { androidx.media3.cast.Cast.getSingletonInstance(app).endCurrentSession(true) }
+    }
+
+    private var playingHere = false
 
     /** Stops and clears the player, reporting the position. */
     fun stop() {

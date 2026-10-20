@@ -40,7 +40,6 @@
             android:excludeFromRecents="true"
             android:supportsPictureInPicture="true"
             android:resizeableActivity="true"
-            android:screenOrientation="sensorLandscape"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode" />
 
         <service

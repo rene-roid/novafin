@@ -92,6 +92,11 @@ class PlayerActivity : ComponentActivity() {
                 updatePip()
             }
         }
+        // Media stopped from elsewhere (casting ended): nothing left to show.
+        lifecycleScope.launch {
+            var had = false
+            playback.now.collect { if (it != null) had = true else if (had) finish() }
+        }
         setContent {
             NovafinTheme {
                 PlayerScreen(this, inPip.value, onClose = {
