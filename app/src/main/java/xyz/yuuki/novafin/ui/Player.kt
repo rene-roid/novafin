@@ -436,7 +436,7 @@ private fun SeekBar(n: NowPlaying, position: Long, duration: Long, buffered: Lon
         Slider(
             ((preview ?: position).toFloat() / d).coerceIn(0f, 1f), { onSeek((it * d).toLong()) },
             onValueChangeFinished = onDone,
-            colors = SliderDefaults.colors(thumbColor = Moon, activeTrackColor = Moon, inactiveTrackColor = Color.Transparent),
+            colors = SliderDefaults.colors(thumbColor = Moon, activeTrackColor = Moon, inactiveTrackColor = Color.White.copy(alpha = .18f)),
         )
     }
 }

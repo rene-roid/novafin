@@ -105,9 +105,10 @@ always uses the best one that answers and switches without the user noticing.
   add, label, reorder and remove addresses. Login also has "Add another address".
 - Suggestions: the server's own `LocalAddress` from `/System/Info/Public` is offered with one tap;
   Tailscale (100.64.0.0/10, `*.ts.net`) and LAN (private ranges, `.local`) addresses are labelled automatically.
-- Every address is checked with `/System/Info/Public` and must report the **same server `Id`** before it
-  is saved or used, so the token is never sent to a different server. Plain `http://` on a public
-  address gets a warning.
+- Every address is checked with `/System/Info/Public` (no token) and must report the **same server `Id`**
+  before it is used, so the token is never sent to a different server. An address that doesn't answer
+  right now (Tailscale off, away from home) can still be added; it stays unused until it answers as this
+  server. A different server is refused. Plain `http://` on a public address gets a warning.
 - One access token works on every address of the same server, so no re-login per address.
 
 **Choosing the best address (race)**
@@ -155,7 +156,7 @@ always uses the best one that answers and switches without the user noticing.
 
 ### 4.4 Playback decision
 1. Build a **device profile** once from `MediaCodecList`: video codecs (h264, hevc, av1, vp9, plus 10-bit / HDR where the decoder reports it), max resolution, audio codecs (aac, mp3, opus, flac, ac3/eac3 when a decoder or passthrough exists), containers ExoPlayer reads (mkv, mp4, webm, ts, mov), subtitle formats (srt, ass, ssa, pgs, vobsub, vtt as embedded; srt, ass, vtt as external).
-2. Transcoding profile: HLS fMP4 with h264/hevc + aac, stereo down-mix on phones.
+2. Transcoding profile: HLS with MPEG-TS segments, h264/hevc + aac, stereo down-mix on phones. (fMP4 segments were tried first: after a transcode restart, e.g. a resumed download, Jellyfin emits negative `tfdt` timestamps that ExoPlayer rejects.)
 3. `POST /Items/{id}/PlaybackInfo` with the profile, the quality preset for the current network (§4.5), the chosen `AudioStreamIndex` and `SubtitleStreamIndex`, and `StartTimeTicks`.
 4. If the source `SupportsDirectPlay` → `/Videos/{id}/stream?static=true`; else if `SupportsDirectStream` → the remux URL; otherwise play the `TranscodingUrl` (HLS).
 5. If ExoPlayer fails to decode a direct-play file (some AV1 / Hi10P on weak phones), retry once with direct play disabled so the server transcodes, from the same position.

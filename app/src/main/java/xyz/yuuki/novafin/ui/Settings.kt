@@ -331,6 +331,7 @@ private fun AddAddressDialog(onDismiss: () -> Unit, onAdd: (Address) -> Unit) {
     var label by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
+    var unreachable by remember { mutableStateOf<String?>(null) }
     val normalized = normalizeAddress(url)
     val insecure = url.isNotBlank() && normalized.startsWith("http://") && addressKind(normalized) == AddressKind.Public
 
@@ -348,21 +349,30 @@ private fun AddAddressDialog(onDismiss: () -> Unit, onAdd: (Address) -> Unit) {
         confirmButton = {
             TextButton(
                 {
+                    val address = Address(normalized, label.ifBlank { addressKind(normalized).name })
+                    if (unreachable == normalized) {
+                        // Nothing gets sent there until a check sees our server's id answering on it.
+                        onAdd(address)
+                        return@TextButton
+                    }
                     busy = true
                     scope.launch {
-                        // Only the same server gets our token.
                         val info = withContext(Dispatchers.IO) { runCatching { Api.publicInfo(normalized) }.getOrNull() }
                         when {
-                            info == null -> error = "No Jellyfin server answered there"
-                            info.id != app.prefs.serverId -> error = "That's a different Jellyfin server (${info.name})"
                             app.prefs.addresses.any { it.url == normalized } -> error = "Already in the list"
-                            else -> onAdd(Address(normalized, label.ifBlank { addressKind(normalized).name }))
+                            // Only the same server ever gets our token.
+                            info != null && info.id != app.prefs.serverId -> error = "That's a different Jellyfin server (${info.name})"
+                            info == null -> {
+                                error = "Nothing answered there right now (Tailscale off, or away from home?). You can add it anyway; it's only used once it answers as your server."
+                                unreachable = normalized
+                            }
+                            else -> onAdd(address)
                         }
                         busy = false
                     }
                 },
                 enabled = url.isNotBlank() && !busy,
-            ) { Text(if (busy) "Checking…" else "Add") }
+            ) { Text(if (busy) "Checking…" else if (unreachable == normalized) "Add anyway" else "Add") }
         },
         dismissButton = { TextButton(onDismiss) { Text("Cancel") } },
     )

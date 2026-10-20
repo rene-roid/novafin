@@ -124,7 +124,7 @@ private fun Details(item: Item, refresh: () -> Unit) {
             Row(Modifier.fillMaxSize()) {
                 LazyColumn(Modifier.width(360.dp).fillMaxSize(), contentPadding = PaddingValues(24.dp)) {
                     item { BackBar(Modifier.padding(bottom = 12.dp)) }
-                    item { Picture(item.poster ?: item.thumb, 320.dp, Modifier.fillMaxWidth().aspectRatio(if (item.isEpisode) 16f / 9 else 2f / 3).clip(RoundedCornerShape(12.dp))) }
+                    item { Picture(if (item.isEpisode) item.thumb else item.poster ?: item.thumb, 320.dp, Modifier.fillMaxWidth().aspectRatio(if (item.isEpisode) 16f / 9 else 2f / 3).clip(RoundedCornerShape(12.dp))) }
                     item { Gap(16.dp); Actions(item, refresh) }
                 }
                 LazyColumn(Modifier.weight(1f).fillMaxSize(), contentPadding = PaddingValues(top = 48.dp, end = 24.dp, bottom = 32.dp)) {
@@ -170,6 +170,7 @@ private fun Title(item: Item) {
             }
         }
         if (item.genres.isNotEmpty()) Text(item.genres.take(4).joinToString(", "), style = MaterialTheme.typography.bodySmall)
+        Gap(8.dp)
     }
 }
 

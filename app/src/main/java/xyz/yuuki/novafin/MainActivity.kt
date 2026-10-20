@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -152,11 +153,12 @@ private fun Shell() {
                         color = Bg, style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center,
                     )
                 }
-                Box(Modifier.weight(1f)) {
+                // The offline banner already covers the status bar.
+                Box(Modifier.weight(1f).then(if (online) Modifier else Modifier.consumeWindowInsets(WindowInsets.statusBars))) {
                     // Pages scroll under the status bar; keep its icons readable.
                     if (online) Box(
                         Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars).zIndex(1f)
-                            .background(Brush.verticalGradient(listOf(Bg.copy(alpha = .85f), Bg.copy(alpha = .4f)))),
+                            .background(Brush.verticalGradient(listOf(Bg.copy(alpha = .92f), Bg.copy(alpha = .7f)))),
                     )
                     NavDisplay(
                         backStack = nav.stack,
