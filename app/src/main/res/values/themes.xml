@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.Novafin" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:colorAccent">#8F7BFF</item>
+    </style>
+    <color name="bg">#16132B</color>
+</resources>
