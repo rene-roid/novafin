@@ -111,8 +111,11 @@ fun LoginScreen() {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Column(Modifier.widthIn(max = 420.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Image(painterResource(R.mipmap.ic_launcher_foreground), null, Modifier.padding(top = 32.dp).size(112.dp).clip(RoundedCornerShape(28.dp)))
-            Text("Novafin", style = MaterialTheme.typography.displaySmall)
+            Image(
+                painterResource(R.mipmap.ic_launcher_foreground), null,
+                Modifier.padding(top = 32.dp).size(112.dp).glow(Violet, 36.dp, RoundedCornerShape(28.dp)).clip(RoundedCornerShape(28.dp)),
+            )
+            Text("Novafin", style = MaterialTheme.typography.displaySmall.copy(brush = MoonText))
             Text(
                 if (server == null) "Connect to your Jellyfin server" else "Sign in to ${server!!.second.name}",
                 style = MaterialTheme.typography.bodyMedium, color = Sub, textAlign = TextAlign.Center,
@@ -125,7 +128,7 @@ fun LoginScreen() {
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
                     keyboardActions = KeyboardActions(onGo = { if (address.isNotBlank() && !busy) connect() }),
                 )
-                Button(::connect, Modifier.fillMaxWidth(), enabled = address.isNotBlank() && !busy) { Text("Continue") }
+                Button(::connect, Modifier.fillMaxWidth().glow(radius = 14.dp), enabled = address.isNotBlank() && !busy) { Text("Continue") }
             } else if (quickCode != null) {
                 Text("Enter this code in Jellyfin under Settings → Quick Connect", style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
                 Text(quickCode!!, style = MaterialTheme.typography.displaySmall.copy(fontSize = 44.sp, letterSpacing = 8.sp), color = Moon)
@@ -150,7 +153,7 @@ fun LoginScreen() {
                             busy = false
                         }
                     },
-                    Modifier.fillMaxWidth(), enabled = user.isNotBlank() && !busy,
+                    Modifier.fillMaxWidth().glow(radius = 14.dp), enabled = user.isNotBlank() && !busy,
                 ) { Text("Sign in") }
                 OutlinedButton(
                     {

@@ -84,6 +84,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -401,7 +402,7 @@ private fun Controls(
             IconButton({ player.seekBack(); onInteract() }, Modifier.size(64.dp)) { Icon(Icons.Rounded.Replay10, "Back 10 seconds", Modifier.size(40.dp)) }
             IconButton(
                 { if (playing) player.pause() else player.play(); onInteract() },
-                Modifier.size(80.dp).background(Color.White.copy(alpha = .14f), CircleShape),
+                Modifier.size(80.dp).glow(Violet, 24.dp, CircleShape).background(Bg.copy(alpha = .55f), CircleShape),
             ) { Icon(if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, if (playing) "Pause" else "Play", Modifier.size(52.dp)) }
             IconButton({ player.seekForward(); onInteract() }, Modifier.size(64.dp)) { Icon(Icons.Rounded.Forward10, "Forward 10 seconds", Modifier.size(40.dp)) }
         }
@@ -476,13 +477,17 @@ private fun SeekBar(
             fun bar(to: Float, color: Color) = drawRoundRect(color, Offset(0f, top), Size(size.width * to.coerceIn(0f, 1f), h), r)
             bar(1f, Color.White.copy(alpha = .22f))
             bar(buffered.toFloat() / d, Color.White.copy(alpha = .4f))
-            bar(shown.toFloat() / d, Moon)
+            val played = (shown.toFloat() / d).coerceIn(0f, 1f)
+            drawRoundRect(Brush.horizontalGradient(listOf(Violet, Moon), endX = size.width * played), Offset(0f, top), Size(size.width * played, h), r)
             // Chapter boundaries cut small gaps into the track.
             for (c in chapters) {
                 val cx = size.width * c / d
                 drawRect(Color.Black.copy(alpha = .7f), Offset(cx - 1.dp.toPx(), top), Size(2.dp.toPx(), h))
             }
-            drawCircle(Moon, (if (dragging) 9 else 7).dp.toPx(), Offset(size.width * (shown.toFloat() / d).coerceIn(0f, 1f), y))
+            val thumb = Offset(size.width * played, y)
+            // The thumb shines like the moon's rim.
+            drawCircle(Brush.radialGradient(listOf(Moon.copy(alpha = .45f), Color.Transparent), thumb, 22.dp.toPx()), 22.dp.toPx(), thumb)
+            drawCircle(Moon, (if (dragging) 9 else 7).dp.toPx(), thumb)
         }
     }
 }

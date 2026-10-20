@@ -137,9 +137,8 @@ private fun Details(item: Item, refresh: () -> Unit) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
             item {
                 Box(Modifier.fillMaxWidth().aspectRatio(16f / 10)) {
-                    Picture(item.backdrop ?: item.thumb, 800.dp, Modifier.fillMaxSize())
-                    Box(Modifier.fillMaxSize().scrim())
-                    TopScrim()
+                    Picture(item.backdrop ?: item.thumb, 800.dp, Modifier.fillMaxSize().fadeOut())
+                                TopScrim()
                     BackBar()
                 }
             }
@@ -156,7 +155,7 @@ private fun Title(item: Item) {
         if (item.isEpisode) Text(item.seriesName ?: "", style = MaterialTheme.typography.titleMedium, color = Dusk)
         val logo = item.logo?.takeIf { !item.isEpisode }
         if (logo != null) AsyncImage(imageModel(logo, 320.dp), item.name, Modifier.height(80.dp).widthIn(max = 320.dp), contentScale = ContentScale.Fit, alignment = Alignment.CenterStart)
-        else Text(item.name, style = MaterialTheme.typography.headlineMedium)
+        else Text(item.name, style = MaterialTheme.typography.headlineMedium.copy(brush = MoonText))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             val bits = listOfNotNull(
                 item.episodeLabel, item.year?.toString(), item.officialRating,
@@ -199,7 +198,7 @@ private fun Actions(item: Item, refresh: () -> Unit) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (target != null) {
                 val resumeAt = target.userData.positionMs.takeIf { it > 0 && !target.userData.played }
-                Button({ play(target, null, audio.takeIf { target == item }, sub.takeIf { target == item }) }) {
+                Button({ play(target, null, audio.takeIf { target == item }, sub.takeIf { target == item }) }, Modifier.glow()) {
                     Icon(Icons.Rounded.PlayArrow, null)
                     Spacer(Modifier.width(6.dp))
                     Text(
