@@ -83,7 +83,7 @@ import xyz.yuuki.novafin.ui.Moon
 import xyz.yuuki.novafin.ui.Nav
 import xyz.yuuki.novafin.ui.NightSky
 import xyz.yuuki.novafin.ui.NovafinTheme
-import xyz.yuuki.novafin.ui.Accent
+import xyz.yuuki.novafin.ui.Violet
 import xyz.yuuki.novafin.ui.Raised
 import xyz.yuuki.novafin.ui.Raised2
 import xyz.yuuki.novafin.ui.Route
@@ -142,13 +142,13 @@ private fun Shell() {
                 Spacer(Modifier.padding(top = 8.dp))
                 for (t in tabs) NavigationRailItem(
                     root == t.route, { nav.tab(t.route) }, { Icon(if (root == t.route) t.selectedIcon else t.icon, t.label) }, label = { Text(t.label) },
-                    colors = NavigationRailItemDefaults.colors(indicatorColor = Raised2, selectedIconColor = Moon, selectedTextColor = Moon, unselectedIconColor = Sub, unselectedTextColor = Sub),
+                    colors = NavigationRailItemDefaults.colors(indicatorColor = Violet.copy(alpha = .22f), selectedIconColor = Moon, selectedTextColor = Moon, unselectedIconColor = Sub, unselectedTextColor = Sub),
                 )
                 Spacer(Modifier.weight(1f))
                 NavigationRailItem(
                     root == Route.Settings, { nav.tab(Route.Settings) },
                     { Icon(if (root == Route.Settings) Icons.Rounded.Settings else Icons.Outlined.Settings, "Settings") }, label = { Text("Settings") },
-                    colors = NavigationRailItemDefaults.colors(indicatorColor = Raised2, selectedIconColor = Moon, selectedTextColor = Moon, unselectedIconColor = Sub, unselectedTextColor = Sub),
+                    colors = NavigationRailItemDefaults.colors(indicatorColor = Violet.copy(alpha = .22f), selectedIconColor = Moon, selectedTextColor = Moon, unselectedIconColor = Sub, unselectedTextColor = Sub),
                 )
             }
             Column(Modifier.weight(1f)) {
@@ -186,11 +186,12 @@ private fun Shell() {
                         },
                     )
                 }
-                if (!tablet) Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = .05f)))
+                // A thin violet rim of light on top of the bar.
+                if (!tablet) Box(Modifier.fillMaxWidth().height(1.dp).background(Brush.horizontalGradient(listOf(Color.Transparent, Violet.copy(alpha = .5f), Color.Transparent))))
                 if (!tablet) NavigationBar(containerColor = Bg.copy(alpha = .94f)) {
                     for (t in tabs) NavigationBarItem(
                         root == t.route, { nav.tab(t.route) }, { Icon(if (root == t.route) t.selectedIcon else t.icon, t.label) }, label = { Text(t.label) },
-                        colors = NavigationBarItemDefaults.colors(indicatorColor = Raised2, selectedIconColor = Moon, selectedTextColor = Moon, unselectedIconColor = Sub, unselectedTextColor = Sub),
+                        colors = NavigationBarItemDefaults.colors(indicatorColor = Violet.copy(alpha = .22f), selectedIconColor = Moon, selectedTextColor = Moon, unselectedIconColor = Sub, unselectedTextColor = Sub),
                     )
                 }
             }

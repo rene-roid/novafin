@@ -402,7 +402,7 @@ private fun Controls(
             IconButton({ player.seekBack(); onInteract() }, Modifier.size(64.dp)) { Icon(Icons.Rounded.Replay10, "Back 10 seconds", Modifier.size(40.dp)) }
             IconButton(
                 { if (playing) player.pause() else player.play(); onInteract() },
-                Modifier.size(80.dp).background(Color.Black.copy(alpha = .45f), CircleShape),
+                Modifier.size(80.dp).glow(Violet, 24.dp, CircleShape).background(Bg.copy(alpha = .55f), CircleShape),
             ) { Icon(if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, if (playing) "Pause" else "Play", Modifier.size(52.dp)) }
             IconButton({ player.seekForward(); onInteract() }, Modifier.size(64.dp)) { Icon(Icons.Rounded.Forward10, "Forward 10 seconds", Modifier.size(40.dp)) }
         }
@@ -478,14 +478,15 @@ private fun SeekBar(
             bar(1f, Color.White.copy(alpha = .22f))
             bar(buffered.toFloat() / d, Color.White.copy(alpha = .4f))
             val played = (shown.toFloat() / d).coerceIn(0f, 1f)
-            drawRoundRect(Moon, Offset(0f, top), Size(size.width * played, h), r)
+            drawRoundRect(Brush.horizontalGradient(listOf(Violet, Moon), endX = size.width * played), Offset(0f, top), Size(size.width * played, h), r)
             // Chapter boundaries cut small gaps into the track.
             for (c in chapters) {
                 val cx = size.width * c / d
                 drawRect(Color.Black.copy(alpha = .7f), Offset(cx - 1.dp.toPx(), top), Size(2.dp.toPx(), h))
             }
             val thumb = Offset(size.width * played, y)
-            if (dragging) drawCircle(Brush.radialGradient(listOf(Moon.copy(alpha = .35f), Color.Transparent), thumb, 20.dp.toPx()), 20.dp.toPx(), thumb)
+            // The thumb shines like the moon's rim.
+            drawCircle(Brush.radialGradient(listOf(Moon.copy(alpha = .45f), Color.Transparent), thumb, 22.dp.toPx()), 22.dp.toPx(), thumb)
             drawCircle(Moon, (if (dragging) 9 else 7).dp.toPx(), thumb)
         }
     }
@@ -574,13 +575,13 @@ private fun TracksSheet(n: NowPlaying, onDismiss: () -> Unit) {
     ModalBottomSheet(onDismiss, containerColor = Raised) {
         Row(Modifier.fillMaxWidth().fillMaxHeight(.8f).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             LazyColumn(Modifier.weight(1f)) {
-                item { Text("Audio", Modifier.padding(vertical = 8.dp), style = MaterialTheme.typography.titleMedium, color = Accent) }
+                item { Text("Audio", Modifier.padding(vertical = 8.dp), style = MaterialTheme.typography.titleMedium, color = Violet) }
                 items(n.streams.filter { it.isAudio }, key = { "a${it.index}" }) { s ->
                     Choice(s.displayTitle, s.index == n.audio) { playback.selectAudio(s.index); onDismiss() }
                 }
             }
             LazyColumn(Modifier.weight(1f)) {
-                item { Text("Subtitles", Modifier.padding(vertical = 8.dp), style = MaterialTheme.typography.titleMedium, color = Accent) }
+                item { Text("Subtitles", Modifier.padding(vertical = 8.dp), style = MaterialTheme.typography.titleMedium, color = Violet) }
                 item { Choice("Off", n.sub < 0) { playback.selectSubtitle(-1); onDismiss() } }
                 items(n.streams.filter { it.isSub }, key = { "s${it.index}" }) { s ->
                     Choice(s.displayTitle + if (s.isExternal) " · external" else "", s.index == n.sub) { playback.selectSubtitle(s.index); onDismiss() }
@@ -598,11 +599,11 @@ private fun SettingsSheet(n: NowPlaying, onDismiss: () -> Unit) {
     ModalBottomSheet(onDismiss, containerColor = Raised) {
         LazyColumn(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
             item {
-                Text("Speed", Modifier.padding(vertical = 8.dp), style = MaterialTheme.typography.titleMedium, color = Accent)
+                Text("Speed", Modifier.padding(vertical = 8.dp), style = MaterialTheme.typography.titleMedium, color = Violet)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     for (s in listOf(.5f, .75f, 1f, 1.25f, 1.5f, 2f)) FilterChip(speed == s, { speed = s; playback.player.setPlaybackSpeed(s) }, { Text("${s}×") })
                 }
-                Text("Quality", Modifier.padding(top = 16.dp, bottom = 4.dp), style = MaterialTheme.typography.titleMedium, color = Accent)
+                Text("Quality", Modifier.padding(top = 16.dp, bottom = 4.dp), style = MaterialTheme.typography.titleMedium, color = Violet)
                 Text(
                     listOfNotNull(n.method.label, n.transcodeInfo, n.effective.label.takeIf { n.quality == Quality.Auto }?.let { "Auto: $it" }).joinToString(" · "),
                     style = MaterialTheme.typography.bodySmall,

@@ -133,15 +133,12 @@ private fun Details(item: Item, refresh: () -> Unit) {
                 }
             }
         }
-    } else Box(Modifier.fillMaxSize()) {
-        // The artwork's colours light the page behind the title and buttons.
-        val list = androidx.compose.foundation.lazy.rememberLazyListState()
-        AmbientLight(item.backdrop ?: item.thumb, Modifier.fillMaxWidth().height(720.dp).scrollsWith(list))
-        LazyColumn(Modifier.fillMaxSize(), list, contentPadding = PaddingValues(bottom = 32.dp)) {
+    } else {
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
             item {
                 Box(Modifier.fillMaxWidth().aspectRatio(16f / 10)) {
                     Picture(item.backdrop ?: item.thumb, 800.dp, Modifier.fillMaxSize().fadeOut())
-                    TopScrim()
+                                TopScrim()
                     BackBar()
                 }
             }
@@ -158,7 +155,7 @@ private fun Title(item: Item) {
         if (item.isEpisode) Text(item.seriesName ?: "", style = MaterialTheme.typography.titleMedium, color = Dusk)
         val logo = item.logo?.takeIf { !item.isEpisode }
         if (logo != null) AsyncImage(imageModel(logo, 320.dp), item.name, Modifier.height(80.dp).widthIn(max = 320.dp), contentScale = ContentScale.Fit, alignment = Alignment.CenterStart)
-        else Text(item.name, style = MaterialTheme.typography.headlineMedium)
+        else Text(item.name, style = MaterialTheme.typography.headlineMedium.copy(brush = MoonText))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             val bits = listOfNotNull(
                 item.episodeLabel, item.year?.toString(), item.officialRating,
@@ -221,7 +218,7 @@ private fun Actions(item: Item, refresh: () -> Unit) {
             FilledTonalIconButton({
                 played = !played
                 scope.launch { runCatching { app.api.setPlayed(item.id, played) }.onFailure { played = !played }; forgetUi("home"); refresh() }
-            }) { Icon(if (played) Icons.Rounded.CheckCircle else Icons.Rounded.Check, if (played) "Mark unwatched" else "Mark watched", tint = if (played) Accent else Color.White) }
+            }) { Icon(if (played) Icons.Rounded.CheckCircle else Icons.Rounded.Check, if (played) "Mark unwatched" else "Mark watched", tint = if (played) Violet else Color.White) }
             FilledTonalIconButton({
                 fav = !fav
                 scope.launch { runCatching { app.api.setFavorite(item.id, fav) }.onFailure { fav = !fav } }

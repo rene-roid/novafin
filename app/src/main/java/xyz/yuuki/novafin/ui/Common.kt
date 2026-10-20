@@ -183,17 +183,17 @@ fun Picture(img: Img?, width: Dp, modifier: Modifier = Modifier, scale: ContentS
 
 private val cardShape = RoundedCornerShape(8.dp)
 
-/** A faint hairline of light on the top edge of cards, so they lift off the dark. */
-private val rim = Brush.verticalGradient(listOf(Color.White.copy(alpha = .10f), Color.Transparent))
+/** Moonlight catching the top edge of a card, like the crescent's rim. */
+private val rim = Brush.verticalGradient(listOf(Moon.copy(alpha = .28f), Violet.copy(alpha = .08f), Color.Transparent))
 
 @Composable
 fun Badges(item: Item, modifier: Modifier = Modifier) {
     val dl by App.it.downloads.states.collectAsStateWithLifecycle()
     Row(modifier.padding(6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         if (dl[item.id]?.done == true) Icon(Icons.Rounded.DownloadDone, "Downloaded", Modifier.size(20.dp).background(Bg.copy(alpha = .7f), CircleShape).padding(2.dp), tint = Moon)
-        if (item.userData.played) Icon(Icons.Rounded.CheckCircle, "Watched", Modifier.size(20.dp).background(Bg.copy(alpha = .7f), CircleShape), tint = Accent)
+        if (item.userData.played) Icon(Icons.Rounded.CheckCircle, "Watched", Modifier.size(20.dp).background(Bg.copy(alpha = .7f), CircleShape), tint = Violet)
         else if (item.userData.unplayed > 0) Text(
-            item.userData.unplayed.toString(), Modifier.background(Accent, RoundedCornerShape(10.dp)).padding(horizontal = 7.dp, vertical = 1.dp), color = Bg,
+            item.userData.unplayed.toString(), Modifier.background(Violet, RoundedCornerShape(10.dp)).padding(horizontal = 7.dp, vertical = 1.dp),
             style = MaterialTheme.typography.labelSmall,
         )
     }
@@ -213,7 +213,7 @@ fun ProgressLine(item: Item, modifier: Modifier = Modifier) {
 /** 2:3 poster with title below. */
 @Composable
 fun PosterCard(item: Item, width: Dp, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Column(modifier.width(width).pressable(onClick).clip(cardShape)) {
+    Column(modifier.width(width).clip(cardShape).clickable(onClick = onClick)) {
         Box(Modifier.fillMaxWidth().aspectRatio(2f / 3).clip(cardShape).border(1.dp, rim, cardShape)) {
             Picture(if (item.isEpisode) item.poster else item.poster ?: item.thumb, width, Modifier.fillMaxSize())
             Badges(item, Modifier.align(Alignment.TopEnd))
@@ -230,7 +230,7 @@ fun PosterCard(item: Item, width: Dp, modifier: Modifier = Modifier, onClick: ()
 /** 16:9 still with progress, for continue watching and episodes. */
 @Composable
 fun ThumbCard(item: Item, width: Dp, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Column(modifier.width(width).pressable(onClick).clip(cardShape)) {
+    Column(modifier.width(width).clip(cardShape).clickable(onClick = onClick)) {
         Box(Modifier.fillMaxWidth().aspectRatio(16f / 9).clip(cardShape).border(1.dp, rim, cardShape)) {
             Picture(item.thumb ?: item.poster, width, Modifier.fillMaxSize())
             Badges(item, Modifier.align(Alignment.TopEnd))

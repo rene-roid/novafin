@@ -88,12 +88,12 @@ fun PageTop(title: String) {
     val nav = LocalNav.current
     Row(Modifier.windowInsetsPadding(WindowInsets.statusBars).padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
         if (nav.stack.size > 1) IconButton({ nav.back() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }
-        Text(title, Modifier.padding(start = 12.dp), style = MaterialTheme.typography.headlineSmall)
+        Text(title, Modifier.padding(start = 12.dp), style = MaterialTheme.typography.headlineSmall.copy(brush = MoonText))
     }
 }
 
 @Composable
-private fun Group(title: String) = Text(title, Modifier.padding(start = 16.dp, top = 24.dp, bottom = 4.dp), style = MaterialTheme.typography.labelLarge, color = Accent)
+private fun Group(title: String) = Text(title, Modifier.padding(start = 16.dp, top = 24.dp, bottom = 4.dp), style = MaterialTheme.typography.labelLarge, color = Violet)
 
 @Composable
 private fun Row2(title: String, subtitle: String? = null, onClick: (() -> Unit)? = null, trailing: @Composable () -> Unit = {}) {
@@ -305,7 +305,7 @@ fun AddressesScreen() {
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
-                IconButton({ save(list.toMutableList().also { it[i] = a.copy(tv = !a.tv) }) }) { Icon(Icons.Rounded.Cast, "Reachable from TV", tint = if (a.tv) Accent else Faint) }
+                IconButton({ save(list.toMutableList().also { it[i] = a.copy(tv = !a.tv) }) }) { Icon(Icons.Rounded.Cast, "Reachable from TV", tint = if (a.tv) Violet else Faint) }
                 IconButton({
                     pinned = if (pinned == a.url) null else a.url
                     p.pinned = pinned
