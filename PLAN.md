@@ -107,12 +107,81 @@ Media URLs that ExoPlayer or Chromecast fetch carry `api_key=<token>` instead.
 ### 4.3 Playback decision
 1. Build a **device profile** once from `MediaCodecList`: video codecs (h264, hevc, av1, vp9, plus 10-bit / HDR where the decoder reports it), max resolution, audio codecs (aac, mp3, opus, flac, ac3/eac3 when a decoder or passthrough exists), containers ExoPlayer reads (mkv, mp4, webm, ts, mov), subtitle formats (srt, ass, ssa, pgs, vobsub, vtt as embedded; srt, ass, vtt as external).
 2. Transcoding profile: HLS fMP4 with h264/hevc + aac, stereo down-mix on phones.
-3. `POST /Items/{id}/PlaybackInfo` with the profile, the max bitrate for the current network (Wi-Fi vs mobile setting), the chosen `AudioStreamIndex` and `SubtitleStreamIndex`, and `StartTimeTicks`.
-4. If the source `SupportsDirectPlay` → `/Videos/{id}/stream?static=true`; otherwise play the `TranscodingUrl` (HLS).
+3. `POST /Items/{id}/PlaybackInfo` with the profile, the quality preset for the current network (§4.4), the chosen `AudioStreamIndex` and `SubtitleStreamIndex`, and `StartTimeTicks`.
+4. If the source `SupportsDirectPlay` → `/Videos/{id}/stream?static=true`; else if `SupportsDirectStream` → the remux URL; otherwise play the `TranscodingUrl` (HLS).
 5. If ExoPlayer fails to decode a direct-play file (some AV1 / Hi10P on weak phones), retry once with direct play disabled so the server transcodes, from the same position.
 6. Downloaded items skip all of this and play the local file.
 
-### 4.4 Player
+### 4.4 Compression and quality
+
+Goal: start fast and stall less on weak connections, and keep downloads small, without wasting the
+server's CPU or making files look worse than they need to.
+
+**What the server can do today** (`/System/Configuration/encoding` on goonhouse): no hardware
+acceleration, HEVC and AV1 encoding disabled, so every transcode is software H.264. Consequences:
+- Avoid transcoding when it isn't needed: direct play first, then **remux** (direct stream: same video,
+  new container and/or audio only, almost free for the server), full transcode last.
+- Many files are already AV1 at ~2 Mbps. Re-encoding them to H.264 at the same bitrate would look
+  worse, so the original is often the smallest good-looking option (see "smart original" below).
+- The app reads the codecs the server will produce from `TranscodingUrl` and adapts. Turning on
+  hardware acceleration and "Allow encoding in HEVC" in the dashboard makes the app use HEVC
+  automatically (same quality at roughly half the size), with no app change. Settings shows a hint
+  when only H.264 is available.
+
+**Quality presets** (shared by streaming and downloads):
+
+| Preset | Max resolution | Video bitrate | Audio | ~Size per hour |
+|---|---|---|---|---|
+| Original | source | source | source | source |
+| High | 1080p | 8 Mbps (HEVC 5) | stereo 192 kbps | 3.6 GB (HEVC 2.3) |
+| Medium | 720p | 3 Mbps (HEVC 2) | stereo 160 kbps | 1.4 GB (HEVC 0.9) |
+| Low | 480p | 1.2 Mbps (HEVC 0.8) | stereo 128 kbps | 0.6 GB (HEVC 0.4) |
+| Data saver | 360p | 0.6 Mbps | stereo 96 kbps | 0.3 GB |
+
+Requests set `MaxStreamingBitrate`, `VideoBitrate`, `MaxWidth`/`MaxHeight`, `AudioBitrate`,
+`TranscodingMaxAudioChannels=2` and `VideoCodec` (`hevc,h264` when the device decodes HEVC, else `h264`).
+
+**Streaming**
+- Separate presets for Wi-Fi and mobile data (defaults: Original on Wi-Fi, Medium on mobile); metered
+  detection via `NetworkCapabilities`, re-evaluated at each new item.
+- **Smart original**: if the source bitrate is already at or below the preset's bitrate and the device
+  can decode it, direct play the original even when a lower preset is selected.
+- **Auto quality**: ExoPlayer's bandwidth meter decides the starting preset when "Auto" is chosen; if
+  playback rebuffers twice within a minute, step down one preset at the same position and show a
+  small "Lowered quality" note; never step back up mid-item.
+- Stereo downmix of 5.1/7.1 on phones and tablets (unless an HDMI/USB output reports multichannel),
+  which saves 300–600 kbps on transcodes.
+- Faster start: request PlaybackInfo and start the stream in parallel with loading the player
+  screen, start playback after 1.5 s of buffer instead of ExoPlayer's 2.5 s, bigger forward buffer
+  (60 s) on Wi-Fi, smaller (30 s) on mobile to avoid wasting data on abandoned episodes.
+- Images: request posters and backdrops at the size actually drawn (`fillWidth`), `format=Webp`,
+  `quality=85`; one notch smaller on mobile data. Cuts page load bytes several times over.
+
+**Downloads**
+- Download preset chosen in settings (default Medium), with a per-download override in the download
+  dialog that shows the **estimated size** (bitrate × runtime) for the item or the whole season and
+  the free space left.
+- Smart original applies here too: if the original is smaller than the preset's estimate and
+  playable on the device, download the original.
+- Transcoded downloads keep **only the chosen audio language** (from track memory) in stereo; an
+  option keeps both original and dub audio.
+- Text subtitles (SRT/ASS) are fetched as small sidecar files for the remembered languages; image
+  subtitles (PGS/VobSub) are burned in when the remembered choice is one of them, since they can't be
+  carried in a transcoded stream.
+- Transcoded downloads are fetched as HLS segments through Media3's `DownloadManager`: resumable per
+  segment, and the server encodes them as fast as its CPU allows. Originals are a plain file with
+  HTTP range resume.
+
+**Storage**
+- Storage limit (e.g. 10 / 25 / 50 GB / unlimited) and a warning before a download would exceed it
+  or the free space.
+- Auto-delete watched downloads (off / immediately / after 1 day / after 7 days).
+- Smart episodes per show: keep the next N unwatched episodes downloaded; watching one deletes it
+  (if auto-delete is on) and queues the next, on Wi-Fi only.
+- Storage location: internal or SD card (`getExternalFilesDirs`).
+- Image cache capped (256 MB default), clearable in settings.
+
+### 4.5 Player
 - Separate `PlayerActivity` in its own task (`taskAffinity`, `singleTask`, `supportsPictureInPicture`), so the user can browse the app while PiP keeps playing.
 - The ExoPlayer lives in `PlaybackService`; the activity attaches its `PlayerSurface` to it. Leaving the screen doesn't kill playback; the notification brings it back.
 - Fullscreen: edge-to-edge, system bars hidden (swipe to reveal), display cutout used (`LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES`), screen kept on while playing, sensor landscape by default with a rotate-lock button.
@@ -120,7 +189,7 @@ Media URLs that ExoPlayer or Chromecast fetch carry `api_key=<token>` instead.
 - Gestures: double-tap left/right to seek ±10 s (accumulating), vertical swipe on the left half for brightness and right half for volume, horizontal swipe to scrub, pinch for fit ↔ fill/crop (remembered).
 - Tracks sheet lists audio and subtitles with Jellyfin's display titles ("Japanese – Opus 2.0", "English – Signs & Songs"). Direct play: switch in ExoPlayer with a `TrackSelectionOverride`, mapping Jellyfin streams to ExoPlayer track groups by order within type. Transcode: request new PlaybackInfo with the new index and swap the URL at the same position.
 - Subtitle style: size, colour/outline, background box, bottom margin, applied with `CaptionStyleCompat`; ASS styling kept where ExoPlayer supports it.
-- Speed 0.5–2×, reset per item; quality sheet (Auto / original / 20, 10, 4, 2 Mbps) forces a transcode below the source bitrate.
+- Speed 0.5–2×, reset per item; quality sheet (Auto / Original / High / Medium / Low / Data saver, §4.4) shows the current mode (direct play, remux or transcode, codec and bitrate).
 - **Skip intro**: fetch media segments; while inside an Intro or Recap segment show a "Skip intro" button (or skip automatically if enabled).
 - **Up next**: at the Outro segment, or 30 s before the end, show the next episode card with a countdown; autoplay if enabled. The next episode is fetched from `/Shows/{id}/Episodes` once the current one starts.
 - **PiP**: `setAutoEnterEnabled(true)` on Android 12+ while playing, `onUserLeaveHint` before that; aspect ratio from the video; play/pause and ±10 s remote actions; controls hidden in PiP; closing PiP stops playback and reports the position.
@@ -128,12 +197,12 @@ Media URLs that ExoPlayer or Chromecast fetch carry `api_key=<token>` instead.
 - **Resume**: start position is the newer of the server's `PlaybackPositionTicks` and the local offline position; "Resume / Start over" when both are possible.
 - Audio focus and becoming-noisy handled by ExoPlayer; headset and Bluetooth buttons through the media session.
 
-### 4.5 Progress reporting
+### 4.6 Progress reporting
 - `Sessions/Playing` on start, `Progress` every 10 s and on pause, seek and track change, `Stopped` on end, item change or close, all with the `PlaySessionId` from PlaybackInfo.
 - Jellyfin marks an item played past 90 %; we do the same locally for downloads.
 - If a report fails (offline, or playing a download with no connection) the latest position for that item goes into the pending-sync queue instead.
 
-### 4.6 Remembered audio and subtitle choices
+### 4.7 Remembered audio and subtitle choices
 - Stored per **series id** (episodes) or per **item id** (movies) in Prefs:
   `{ audioLang, audioTitle, subLang, subTitle, subForced, subOff, updatedAt }`.
 - Saved whenever the user picks a track in the player or on the detail page.
@@ -143,36 +212,37 @@ Media URLs that ExoPlayer or Chromecast fetch carry `api_key=<token>` instead.
   3. If nothing matches → the defaults from settings → the server user's `AudioLanguagePreference` / `SubtitleLanguagePreference` / `SubtitleMode` → the file's default flags.
 - Used both for PlaybackInfo (indices) and to prefill the detail page pickers, so the next episode, a new session, or a downloaded episode all start with the right tracks.
 
-### 4.7 Downloads
+### 4.8 Downloads
 - Foreground service (`dataSync`) with a queue; one download at a time, progress notification, pause/cancel.
-- **Original**: `/Items/{id}/Download`. **Transcoded**: a progressive MP4 from `/Videos/{id}/stream.mp4` with h264/aac at the chosen bitrate and the remembered audio track (burned-in subtitles optional).
-- HTTP range requests so interrupted downloads resume; "Wi-Fi only" pauses on mobile data.
+- **Original**: `/Items/{id}/Download` with HTTP range resume. **Transcoded**: HLS at the download preset through Media3's `DownloadManager` (§4.4), with the remembered audio track only.
+- "Wi-Fi only" (default on) pauses on mobile data; storage limit and free space checked before queueing.
 - Saved alongside: item JSON (metadata + media streams), external subtitle files, primary / backdrop / thumb images, the show and season JSON for offline browsing.
 - Files in the app's external files dir (`getExternalFilesDir("downloads")`), not shared storage, so no storage permission is needed.
 - Entry points: movie, episode, season ("download season / unwatched only"), and an index screen with sizes, storage used and delete.
 - Downloaded items show a badge everywhere and always play from disk, online or not.
 
-### 4.8 Offline sync on reconnect
+### 4.9 Offline sync on reconnect
 - Pending queue (`pending.json`) keyed by item id: `{ positionTicks, played, favourite?, at }`; newest entry per item wins locally.
 - Triggers: the network callback reports a validated network, the app comes to the foreground, or a download finishes.
 - For each entry: `GET /UserItems/{id}/UserData`; if the server's `LastPlayedDate` is newer than our `at`, drop ours (the other device wins); else `POST /UserItems/{id}/UserData` with position, played flag and `LastPlayedDate = at`. Remove the entry on success, keep it on failure.
 - The merge decision is a pure function with unit tests.
 
-### 4.9 Chromecast
+### 4.10 Chromecast
 - `CastPlayer.Builder(context).setLocalPlayer(exoPlayer)` in the service, with the default media receiver (`DefaultCastOptionsProvider`) and the Compose `MediaRouteButton` in the player and app bar.
 - A custom `MediaItemConverter` turns each item into a Jellyfin HLS URL the Chromecast can always play: `/Videos/{id}/master.m3u8` with `VideoCodec=h264`, `AudioCodec=aac`, the current audio index, `SubtitleMethod=Encode` for the chosen subtitle (works for PGS too), max bitrate and `api_key`.
 - Switching to the TV continues from the current position; disconnecting resumes locally.
 - The progress reporter reads the cast player's position, so watch progress keeps syncing while casting.
 
-### 4.10 Settings
+### 4.11 Settings
 - Account: server, user, log out
-- Playback: max bitrate on Wi-Fi / mobile, prefer direct play, autoplay next episode, auto skip intro, auto PiP, background audio, default zoom
+- Playback: prefer direct play, autoplay next episode, auto skip intro, auto PiP, background audio, default zoom
 - Languages: default audio and subtitle language, subtitle mode (default / always / only forced / off)
 - Subtitles: size, colour, background, position
-- Downloads: quality, Wi-Fi only, storage used, delete all
+- Streaming quality: preset on Wi-Fi and on mobile data (incl. Auto), smart original, stereo downmix, load smaller images on mobile data
+- Downloads: preset, keep both audio languages, Wi-Fi only, storage limit, storage location, auto-delete watched, smart episodes per show (N), storage used, delete all, clear image cache
 - About: version, server version
 
-### 4.11 Look and feel
+### 4.12 Look and feel
 - Dark theme from the icon: deep indigo background (`#16132B`), raised surfaces (`#221D3D`), violet accent (`#8F7BFF`), warm moon highlight (`#FFE9D2`) for progress and primary buttons, dusk pink (`#D8A0AE`) for secondary accents.
 - Figtree font, posters with 8 dp corners, backdrops fading into the background, shimmer placeholders while loading.
 - Adaptive launcher icon from `assets/icon.png` (generated mipmaps in `app/src/main/res/mipmap-*`), plus a monochrome crescent for themed icons.
@@ -186,9 +256,9 @@ Each step ends with a building app, tested on the phone emulator, a tablet emula
 3. **Shell + home**: phone bar / tablet rail, home rows, tablet hero, image loading.
 4. **Library + search + details**: paged grid, sort/filter, search, movie/show/season/episode pages, watched and favourite toggles.
 5. **Player core**: PlaybackService, device profile, PlaybackInfo decision, PlayerActivity, controls, fullscreen, resume, progress reporting, transcode fallback.
-6. **Tracks**: audio/subtitle/quality/speed sheets, external subtitles, subtitle styling, track memory and the picking function (+ tests).
+6. **Tracks and quality**: audio/subtitle/quality/speed sheets, external subtitles, subtitle styling, track memory and the picking function (+ tests); quality presets, smart original, auto step-down, downmix, sized WebP images.
 7. **Player extras**: gestures, chapters, skip intro, up next and autoplay, PiP, background audio, trickplay thumbnails.
-8. **Downloads**: service, original/transcoded, season downloads, downloads screen, offline playback.
+8. **Downloads**: service, original + HLS transcoded via DownloadManager, size estimates, season downloads, storage limit, auto-delete, smart episodes, downloads screen, offline playback.
 9. **Offline mode + sync**: offline shell, pending queue, reconnect sync (+ tests).
 10. **Chromecast**: CastPlayer, converter, route button, reporting while casting.
 11. **Settings + polish**: settings screen, tablet two-pane details, empty/error states, accessibility pass (content descriptions, touch targets, TalkBack on the player).
@@ -204,6 +274,7 @@ Each step ends with a building app, tested on the phone emulator, a tablet emula
 - **AV1 / HEVC 10-bit on older phones**: software AV1 decoding can stutter at 1080p; the decode-error fallback to transcode covers it, and a "prefer transcode for AV1" setting is the escape hatch.
 - **Chromecast codecs**: the default receiver can't play MKV/AV1/Opus, hence always casting a transcoded HLS stream.
 - **PGS / VobSub with transcoding**: image subtitles can't be delivered as text; they are burned in when transcoding or casting.
+- **CPU-only H.264 transcoding on the server**: transcodes cost server CPU and are bigger than HEVC; the app prefers direct play, remux and smart original, and uses HEVC as soon as the server allows it. Several simultaneous transcodes may be slow.
 - **Track mapping in direct play**: ExoPlayer may skip a track it can't decode, breaking order-based mapping; we also match on language and channel count before trusting the index.
 
 ## 8. Not planned
