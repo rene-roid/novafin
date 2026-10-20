@@ -30,7 +30,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.DownloadDone
-import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -48,6 +47,10 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -182,7 +185,7 @@ private val cardShape = RoundedCornerShape(8.dp)
 fun Badges(item: Item, modifier: Modifier = Modifier) {
     val dl by App.it.downloads.states.collectAsStateWithLifecycle()
     Row(modifier.padding(6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        if (dl[item.id]?.done == true) Icon(Icons.Rounded.DownloadDone, "Downloaded", Modifier.size(20.dp).background(Bg.copy(alpha = .7f), CircleShape).padding(2.dp), tint = Moon)
+        if (dl[item.id]?.done == true) Icon(Icons.Rounded.DownloadDone, "Downloaded", Modifier.size(20.dp).background(Bg.copy(alpha = .7f), CircleShape).padding(2.dp), tint = Glow)
         if (item.userData.played) Icon(Icons.Rounded.CheckCircle, "Watched", Modifier.size(20.dp).background(Bg.copy(alpha = .7f), CircleShape), tint = Violet)
         else if (item.userData.unplayed > 0) Text(
             item.userData.unplayed.toString(), Modifier.background(Violet, RoundedCornerShape(10.dp)).padding(horizontal = 7.dp, vertical = 1.dp),
@@ -199,7 +202,7 @@ fun ProgressLine(item: Item, modifier: Modifier = Modifier) {
         u.playedPercentage > 0 && !u.played -> (u.playedPercentage / 100).toFloat()
         else -> return
     }
-    LinearProgressIndicator({ pct.coerceIn(0f, 1f) }, modifier.fillMaxWidth().height(3.dp), color = Moon, trackColor = Color.White.copy(alpha = .25f), drawStopIndicator = {}, gapSize = 0.dp)
+    LinearProgressIndicator({ pct.coerceIn(0f, 1f) }, modifier.fillMaxWidth().height(3.dp), color = Glow, trackColor = Color.White.copy(alpha = .25f), drawStopIndicator = {}, gapSize = 0.dp)
 }
 
 /** 2:3 poster with title below. */
@@ -292,12 +295,16 @@ fun ErrorState(message: String, onRetry: (() -> Unit)?, modifier: Modifier = Mod
 fun Empty(message: String, action: String? = null, onAction: () -> Unit = {}) {
     Column(Modifier.fillMaxWidth().padding(48.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(message, style = MaterialTheme.typography.bodyMedium, color = Sub)
-        if (action != null) Button(onAction, Modifier.padding(top = 12.dp)) { Text(action) }
+        if (action != null) AuroraButton(onAction, Modifier.padding(top = 12.dp)) { Text(action) }
     }
 }
 
 /** Fades the bottom of a backdrop into the page. */
-fun Modifier.scrim() = background(Brush.verticalGradient(0f to Color.Transparent, .55f to Bg.copy(alpha = .6f), 1f to Bg))
+fun Modifier.scrim() = graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen).drawWithContent {
+    drawContent()
+    // Fades the picture itself out, so the sky shows through instead of a flat colour.
+    drawRect(Brush.verticalGradient(0f to Color.Black, .5f to Color.Black.copy(alpha = .85f), 1f to Color.Transparent), blendMode = BlendMode.DstIn)
+}
 
 @Composable
 fun BoxScope.TopScrim() = Box(Modifier.fillMaxWidth().height(96.dp).align(Alignment.TopCenter).background(Brush.verticalGradient(listOf(Bg.copy(alpha = .7f), Color.Transparent))))

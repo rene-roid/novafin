@@ -15,7 +15,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -125,10 +124,10 @@ fun LoginScreen() {
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
                     keyboardActions = KeyboardActions(onGo = { if (address.isNotBlank() && !busy) connect() }),
                 )
-                Button(::connect, Modifier.fillMaxWidth(), enabled = address.isNotBlank() && !busy) { Text("Continue") }
+                AuroraButton(::connect, Modifier.fillMaxWidth(), enabled = address.isNotBlank() && !busy) { Text("Continue") }
             } else if (quickCode != null) {
                 Text("Enter this code in Jellyfin under Settings → Quick Connect", style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
-                Text(quickCode!!, style = MaterialTheme.typography.displaySmall.copy(fontSize = 44.sp, letterSpacing = 8.sp), color = Moon)
+                Text(quickCode!!, style = MaterialTheme.typography.displaySmall.copy(fontSize = 44.sp, letterSpacing = 8.sp), color = Glow)
                 CircularProgressIndicator(Modifier.size(28.dp))
                 TextButton({ quickJob?.cancel(); quickCode = null }) { Text("Cancel") }
             } else {
@@ -137,7 +136,7 @@ fun LoginScreen() {
                     password, { password = it }, Modifier.fillMaxWidth(), label = { Text("Password") }, singleLine = true,
                     visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 )
-                Button(
+                AuroraButton(
                     {
                         busy = true
                         error = null

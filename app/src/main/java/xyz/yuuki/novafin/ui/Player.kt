@@ -57,7 +57,6 @@ import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.Subtitles
 import androidx.compose.material.icons.rounded.VolumeUp
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -84,6 +83,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -169,7 +169,7 @@ fun PlayerScreen(activity: PlayerActivity, inPip: Boolean, onClose: () -> Unit) 
             )
         }
 
-        if (loading || buffering) CircularProgressIndicator(Modifier.align(Alignment.Center).size(56.dp), color = Moon)
+        if (loading || buffering) CircularProgressIndicator(Modifier.align(Alignment.Center).size(56.dp), color = Glow)
 
         gestureLabel?.let { (icon, text) ->
             Row(Modifier.align(Alignment.Center).background(Bg.copy(alpha = .75f), RoundedCornerShape(24.dp)).padding(horizontal = 18.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -203,7 +203,7 @@ fun PlayerScreen(activity: PlayerActivity, inPip: Boolean, onClose: () -> Unit) 
                 Text(e, style = MaterialTheme.typography.bodyLarge)
                 Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClose) { Text("Close") }
-                    Button({ n?.let { playback.play(it.item, position) } }) { Text("Retry") }
+                    AuroraButton({ n?.let { playback.play(it.item, position) } }) { Text("Retry") }
                 }
             }
         }
@@ -220,7 +220,7 @@ private fun CastingBackdrop(n: NowPlaying?) {
     Box(Modifier.fillMaxSize()) {
         Picture(n?.item?.backdrop ?: n?.item?.thumb, 1280.dp, Modifier.fillMaxSize())
         Box(Modifier.fillMaxSize().background(Bg.copy(alpha = .75f)))
-        Text("Playing on your TV", Modifier.align(Alignment.Center), style = MaterialTheme.typography.headlineSmall, color = Moon)
+        Text("Playing on your TV", Modifier.align(Alignment.Center), style = MaterialTheme.typography.headlineSmall, color = Glow)
     }
 }
 
@@ -421,7 +421,7 @@ private fun Controls(
                 IconButton({ activity.toggleRotationLock(); onInteract() }) {
                     Icon(if (activity.rotationLocked) Icons.Rounded.ScreenLockRotation else Icons.Rounded.ScreenRotation, "Rotation lock")
                 }
-                IconButton(onFill) { Icon(Icons.Rounded.AspectRatio, if (fill) "Fit to screen" else "Fill screen", tint = if (fill) Moon else Color.White) }
+                IconButton(onFill) { Icon(Icons.Rounded.AspectRatio, if (fill) "Fit to screen" else "Fill screen", tint = if (fill) Glow else Color.White) }
                 IconButton({ activity.enterPip() }) { Icon(Icons.Rounded.PictureInPictureAlt, "Picture in picture") }
                 if (n.next != null) IconButton({ playback.playNext() }) { Icon(Icons.Rounded.SkipNext, "Next episode") }
             }
@@ -476,13 +476,14 @@ private fun SeekBar(
             fun bar(to: Float, color: Color) = drawRoundRect(color, Offset(0f, top), Size(size.width * to.coerceIn(0f, 1f), h), r)
             bar(1f, Color.White.copy(alpha = .22f))
             bar(buffered.toFloat() / d, Color.White.copy(alpha = .4f))
-            bar(shown.toFloat() / d, Moon)
+            val played = (shown.toFloat() / d).coerceIn(0f, 1f)
+            drawRoundRect(Brush.horizontalGradient(listOf(Glow, Sky, Violet), endX = size.width.coerceAtLeast(1f)), Offset(0f, top), Size(size.width * played, h), r)
             // Chapter boundaries cut small gaps into the track.
             for (c in chapters) {
                 val cx = size.width * c / d
                 drawRect(Color.Black.copy(alpha = .7f), Offset(cx - 1.dp.toPx(), top), Size(2.dp.toPx(), h))
             }
-            drawCircle(Moon, (if (dragging) 9 else 7).dp.toPx(), Offset(size.width * (shown.toFloat() / d).coerceIn(0f, 1f), y))
+            drawCircle(Glow, (if (dragging) 9 else 7).dp.toPx(), Offset(size.width * (shown.toFloat() / d).coerceIn(0f, 1f), y))
         }
     }
 }
@@ -547,7 +548,7 @@ private fun UpNext(n: NowPlaying, position: Long, duration: Long, modifier: Modi
     ) {
         Picture(next.thumb, 140.dp, Modifier.width(140.dp).aspectRatio(16f / 9).clip(RoundedCornerShape(8.dp)))
         Column(Modifier.weight(1f)) {
-            Text(if (autoplay) "Next episode in $left" else "Next episode", style = MaterialTheme.typography.labelMedium, color = Moon)
+            Text(if (autoplay) "Next episode in $left" else "Next episode", style = MaterialTheme.typography.labelMedium, color = Glow)
             Text("${next.episodeLabel} · ${next.name}", style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
             TextButton({ dismissed = true }, contentPadding = PaddingValues(0.dp)) { Text("Hide") }
         }
@@ -615,7 +616,7 @@ private fun SettingsSheet(n: NowPlaying, onDismiss: () -> Unit) {
 @Composable
 private fun Choice(label: String, selected: Boolean, onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick).padding(vertical = 12.dp, horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, Modifier.weight(1f), color = if (selected) Moon else Color.White, style = MaterialTheme.typography.bodyLarge)
-        if (selected) Icon(Icons.Rounded.Check, null, tint = Moon)
+        Text(label, Modifier.weight(1f), color = if (selected) Glow else Color.White, style = MaterialTheme.typography.bodyLarge)
+        if (selected) Icon(Icons.Rounded.Check, null, tint = Glow)
     }
 }

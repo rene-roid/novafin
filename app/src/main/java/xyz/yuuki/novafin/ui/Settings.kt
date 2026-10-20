@@ -29,7 +29,6 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -81,7 +80,7 @@ private val allLanguages: List<Pair<String, String>> by lazy {
 
 fun languageName(code: String) = allLanguages.firstOrNull { sameLang(it.first, code) }?.second ?: code
 private val subModes = listOf(null to "Automatic", "Default" to "Default tracks", "Smart" to "When audio is foreign", "Always" to "Always", "OnlyForced" to "Only forced / signs", "None" to "Never")
-private val colors = listOf(0xFFFFFFFF.toInt() to "White", 0xFFFFE9D2.toInt() to "Moon", 0xFFFFEB3B.toInt() to "Yellow", 0xFF8FE3FF.toInt() to "Cyan")
+private val colors = listOf(0xFFFFFFFF.toInt() to "White", 0xFFFFE9D2.toInt() to "Cream", 0xFFFFEB3B.toInt() to "Yellow", 0xFF8FE3FF.toInt() to "Cyan")
 
 @Composable
 fun PageTop(title: String) {
@@ -298,7 +297,7 @@ fun AddressesScreen() {
             Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(10.dp).clip(CircleShape).background(when { !known -> Faint; ms == null -> Dusk; else -> Color(0xFF7EE0A1) }))
                 Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                    Text(a.label + if (a.url == active) " · in use" else "", style = MaterialTheme.typography.titleSmall, color = if (a.url == active) Moon else Color.White)
+                    Text(a.label + if (a.url == active) " · in use" else "", style = MaterialTheme.typography.titleSmall, color = if (a.url == active) Glow else Color.White)
                     Text(a.url, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(
                         when { !known -> "Checking…"; ms == null -> "Not reachable"; else -> "$ms ms" } + if (a.tv) " · reachable from TV" else "",
@@ -310,7 +309,7 @@ fun AddressesScreen() {
                     pinned = if (pinned == a.url) null else a.url
                     p.pinned = pinned
                     scope.launch { app.api.pickBest() }
-                }) { Icon(if (pinned == a.url) Icons.Rounded.PushPin else Icons.Outlined.PushPin, "Pin", tint = if (pinned == a.url) Moon else Faint) }
+                }) { Icon(if (pinned == a.url) Icons.Rounded.PushPin else Icons.Outlined.PushPin, "Pin", tint = if (pinned == a.url) Glow else Faint) }
                 if (i > 0) IconButton({ save(list.toMutableList().also { it.add(i - 1, it.removeAt(i)) }) }) { Icon(Icons.Rounded.ArrowUpward, "Move up") }
                 if (i < list.lastIndex) IconButton({ save(list.toMutableList().also { it.add(i + 1, it.removeAt(i)) }) }) { Icon(Icons.Rounded.ArrowDownward, "Move down") }
                 if (list.size > 1) IconButton({ save(list - a) }) { Icon(Icons.Rounded.Delete, "Remove") }
@@ -321,7 +320,7 @@ fun AddressesScreen() {
                 suggestion?.takeIf { s -> list.none { it.url == s } }?.let { s ->
                     TextButton({ save(insertByKind(list, Address(s, addressKind(s).name))) }) { Text("Add the server's local address $s") }
                 }
-                Button({ adding = true }) { Text("Add address") }
+                AuroraButton({ adding = true }) { Text("Add address") }
             }
         }
     }

@@ -101,7 +101,7 @@ private fun DownloadRow(item: Item, state: DownloadInfo?, onPlay: () -> Unit, on
                 style = MaterialTheme.typography.bodySmall,
             )
             if (state != null && !done && state.state == Download.STATE_DOWNLOADING) {
-                LinearProgressIndicator({ state.percent / 100f }, Modifier.fillMaxWidth().padding(top = 4.dp), color = Moon)
+                LinearProgressIndicator({ state.percent / 100f }, Modifier.fillMaxWidth().padding(top = 4.dp), color = Glow)
             }
         }
         IconButton(onDelete) { Icon(Icons.Rounded.Delete, "Delete") }

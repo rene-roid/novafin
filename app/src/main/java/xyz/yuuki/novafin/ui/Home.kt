@@ -27,7 +27,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -101,7 +100,7 @@ fun HomeScreen() {
                 load.error != null -> item {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                         ErrorState(load.error, load.refresh)
-                        Button({ nav.tab(Route.Downloads) }) { Text("Watch downloads") }
+                        AuroraButton({ nav.tab(Route.Downloads) }) { Text("Watch downloads") }
                     }
                 }
                 else -> item { LoadingRows() }
@@ -115,8 +114,7 @@ fun HomeScreen() {
 private fun Hero(item: Item, onPlay: () -> Unit) {
     val nav = LocalNav.current
     Box(Modifier.fillMaxWidth().heightIn(min = 380.dp).height(460.dp).clickable { nav.open(item) }) {
-        Picture(item.backdrop ?: item.thumb, 1600.dp, Modifier.fillMaxSize())
-        Box(Modifier.fillMaxSize().scrim())
+        Picture(item.backdrop ?: item.thumb, 1600.dp, Modifier.fillMaxSize().scrim())
         TopScrim()
         Header("", Modifier.align(Alignment.TopStart))
         Column(Modifier.align(Alignment.BottomStart).padding(32.dp).widthIn(max = 560.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -125,7 +123,7 @@ private fun Hero(item: Item, onPlay: () -> Unit) {
             else Text(item.seriesName ?: item.name, style = MaterialTheme.typography.displaySmall)
             Text(listOfNotNull(item.episodeLabel, item.name.takeIf { item.isEpisode }).joinToString(" · "), style = MaterialTheme.typography.titleMedium, color = Sub)
             item.overview?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = Sub, maxLines = 3, overflow = TextOverflow.Ellipsis) }
-            Button(onPlay) {
+            AuroraButton(onPlay) {
                 Icon(Icons.Rounded.PlayArrow, null)
                 Spacer(Modifier.width(6.dp))
                 Text(if (item.userData.positionMs > 0) "Resume ${formatTime(item.userData.positionMs)}" else "Play")

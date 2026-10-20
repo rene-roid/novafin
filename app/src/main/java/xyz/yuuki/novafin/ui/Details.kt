@@ -41,7 +41,6 @@ import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.Subtitles
 import androidx.compose.material.icons.rounded.VolumeUp
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -137,8 +136,7 @@ private fun Details(item: Item, refresh: () -> Unit) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
             item {
                 Box(Modifier.fillMaxWidth().aspectRatio(16f / 10)) {
-                    Picture(item.backdrop ?: item.thumb, 800.dp, Modifier.fillMaxSize())
-                    Box(Modifier.fillMaxSize().scrim())
+                    Picture(item.backdrop ?: item.thumb, 800.dp, Modifier.fillMaxSize().scrim())
                     TopScrim()
                     BackBar()
                 }
@@ -165,7 +163,7 @@ private fun Title(item: Item) {
             )
             Text(bits.joinToString(" · "), style = MaterialTheme.typography.bodyMedium, color = Sub)
             item.communityRating?.let {
-                Icon(Icons.Rounded.Star, null, Modifier.size(16.dp), tint = Moon)
+                Icon(Icons.Rounded.Star, null, Modifier.size(16.dp), tint = Glow)
                 Text("%.1f".format(it), style = MaterialTheme.typography.bodyMedium, color = Sub)
             }
         }
@@ -199,7 +197,7 @@ private fun Actions(item: Item, refresh: () -> Unit) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (target != null) {
                 val resumeAt = target.userData.positionMs.takeIf { it > 0 && !target.userData.played }
-                Button({ play(target, null, audio.takeIf { target == item }, sub.takeIf { target == item }) }) {
+                AuroraButton({ play(target, null, audio.takeIf { target == item }, sub.takeIf { target == item }) }) {
                     Icon(Icons.Rounded.PlayArrow, null)
                     Spacer(Modifier.width(6.dp))
                     Text(
@@ -228,7 +226,7 @@ private fun Actions(item: Item, refresh: () -> Unit) {
                 val state = dl[item.id]
                 FilledTonalIconButton({ if (state?.done == true) app.downloads.remove(item.id) else downloading = true }) {
                     when {
-                        state?.done == true -> Icon(Icons.Rounded.DownloadDone, "Remove download", tint = Moon)
+                        state?.done == true -> Icon(Icons.Rounded.DownloadDone, "Remove download", tint = Glow)
                         state != null && state.state != androidx.media3.exoplayer.offline.Download.STATE_FAILED ->
                             CircularProgressIndicator({ state.percent / 100f }, Modifier.size(22.dp), strokeWidth = 2.dp)
                         else -> Icon(Icons.Rounded.Download, "Download")

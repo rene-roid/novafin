@@ -1,11 +1,18 @@
 package xyz.yuuki.novafin.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.LocalContentColor
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
@@ -14,15 +21,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import xyz.yuuki.novafin.R
 
-// From the icon: night sky, violet glow, the moon.
-val Bg = Color(0xFF16132B)
-val Raised = Color(0xFF221D3D)
-val Raised2 = Color(0xFF2D2750)
-val Violet = Color(0xFF8F7BFF)
-val Moon = Color(0xFFFFE9D2)
-val Dusk = Color(0xFFD8A0AE)
-val Sub = Color(0xFFB9B3D6)
-val Faint = Color(0xFF7D769E)
+// Aurora: deep space blue-black, aurora teal for what's active, cyan, violet and pink in the sky.
+val Bg = Color(0xFF070818)
+val Raised = Color(0xFF14162F)
+val Raised2 = Color(0xFF1F2247)
+val Glow = Color(0xFF6FF2D2)
+val Sky = Color(0xFF5CC8FF)
+val Violet = Color(0xFF9D86FF)
+val Dusk = Color(0xFFFF7EC8)
+val Sub = Color(0xFFB4B8D9)
+val Faint = Color(0xFF6E7299)
+
+/** The aurora's colours, for the main buttons and progress. */
+val AuroraBrush = Brush.linearGradient(listOf(Glow, Sky, Violet))
 
 // Static instances of the variable font: some skins (HyperOS) ignore font variation settings and draw everything thin.
 val Figtree = FontFamily(
@@ -54,11 +65,11 @@ private val typography = Typography(
 @Composable
 fun NovafinTheme(content: @Composable () -> Unit) = MaterialTheme(
     colorScheme = darkColorScheme(
-        primary = Moon,
+        primary = Glow,
         onPrimary = Bg,
         secondary = Violet,
         onSecondary = Color.White,
-        secondaryContainer = Color(0xFF4B3F94),
+        secondaryContainer = Raised2,
         onSecondaryContainer = Color.White,
         tertiary = Dusk,
         background = Bg,
@@ -72,7 +83,7 @@ fun NovafinTheme(content: @Composable () -> Unit) = MaterialTheme(
         surfaceContainerHigh = Raised2,
         surfaceContainerHighest = Raised2,
         outline = Faint,
-        outlineVariant = Color(0xFF3A3360),
+        outlineVariant = Color(0xFF2A2E5A),
     ),
     typography = typography,
 ) {
@@ -94,3 +105,18 @@ fun formatBytes(b: Long): String = when {
     b >= 1L shl 20 -> "%.0f MB".format(b / (1L shl 20).toDouble())
     else -> "%.0f KB".format(b / 1024.0)
 }
+
+/** The main action on a screen: an aurora-gradient pill with dark text. */
+@Composable
+fun AuroraButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit,
+) = Button(
+    onClick,
+    modifier.background(if (enabled) AuroraBrush else SolidColor(Raised2), CircleShape),
+    enabled,
+    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, contentColor = Bg, disabledContainerColor = Color.Transparent, disabledContentColor = Faint),
+    content = content,
+)
