@@ -69,9 +69,10 @@ class Playback(private val app: App) {
         @Volatile var active = false
 
         fun defaults(p: Prefs) = TrackDefaults(
-            p.audioLang ?: p.serverAudioLang?.ifEmpty { null },
-            p.subLang ?: p.serverSubLang?.ifEmpty { null },
-            p.subMode ?: p.serverSubMode ?: "Default",
+            p.audioLangs.ifEmpty { listOfNotNull(p.serverAudioLang?.ifEmpty { null }) },
+            p.subLangs.ifEmpty { listOfNotNull(p.serverSubLang?.ifEmpty { null }) },
+            // Picking subtitle languages in the app means wanting them when the audio is foreign.
+            p.subMode ?: if (p.subLangs.isNotEmpty()) "Smart" else p.serverSubMode ?: "Default",
         )
 
         private val DECODER_ERRORS = setOf(
@@ -382,13 +383,7 @@ class Playback(private val app: App) {
             ?: groups.firstOrNull { sameLanguage(it.getTrackFormat(0).language, want.language) } ?: byOrder
     }
 
-    private fun sameLanguage(exoLang: String?, jfLang: String?): Boolean {
-        if (exoLang == null || jfLang == null) return false
-        fun iso3(l: String) = runCatching { Locale.forLanguageTag(l).isO3Language }.getOrDefault(l).ifEmpty { l }
-        // Jellyfin uses bibliographic codes ("fre", "ger"); Java uses terminology ones ("fra", "deu").
-        val alias = mapOf("fre" to "fra", "ger" to "deu", "chi" to "zho", "dut" to "nld", "cze" to "ces", "gre" to "ell", "per" to "fas", "rum" to "ron", "slo" to "slk")
-        return iso3(exoLang).equals(alias[jfLang.lowercase()] ?: jfLang, true)
-    }
+    private fun sameLanguage(exoLang: String?, jfLang: String?) = sameLang(exoLang, jfLang)
 
     /** User picked an audio track: switch and remember it for the show. */
     fun selectAudio(index: Int) {

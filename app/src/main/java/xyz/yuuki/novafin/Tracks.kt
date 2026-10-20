@@ -1,9 +1,27 @@
 package xyz.yuuki.novafin
 
 import java.time.Instant
+import java.util.Locale
 
-/** Fallbacks when nothing is remembered: app settings, then the server user's preferences. */
-data class TrackDefaults(val audioLang: String?, val subLang: String?, val subMode: String)
+/**
+ * Fallbacks when nothing is remembered: the user's languages in order of preference (app settings,
+ * else the server user's), and Jellyfin's subtitle mode.
+ */
+data class TrackDefaults(val audioLangs: List<String>, val subLangs: List<String>, val subMode: String)
+
+// Files tag languages with bibliographic codes ("fre", "ger"), Java and ExoPlayer use terminology ones ("fra", "deu").
+private val BIBLIOGRAPHIC = mapOf(
+    "alb" to "sqi", "arm" to "hye", "baq" to "eus", "bur" to "mya", "chi" to "zho", "cze" to "ces", "dut" to "nld", "fre" to "fra",
+    "geo" to "kat", "ger" to "deu", "gre" to "ell", "ice" to "isl", "mac" to "mkd", "mao" to "mri", "may" to "msa", "per" to "fas",
+    "rum" to "ron", "slo" to "slk", "tib" to "bod", "wel" to "cym",
+)
+
+/** One code per language, whatever form the file, ExoPlayer or the settings use ("en", "eng", "fre", "fra"). */
+fun langKey(code: String?): String? {
+    val c = code?.trim()?.lowercase()?.substringBefore('-')?.substringBefore('_')?.ifEmpty { null } ?: return null
+    val three = if (c.length == 2) runCatching { Locale.forLanguageTag(c).isO3Language }.getOrNull()?.ifEmpty { null } ?: c else c
+    return BIBLIOGRAPHIC[three] ?: three
+}
 
 /** Word overlap between two titles, 0..1. */
 private fun similarity(a: String?, b: String?): Double {
@@ -13,7 +31,7 @@ private fun similarity(a: String?, b: String?): Double {
     return (x intersect y).size.toDouble() / (x union y).size
 }
 
-private fun sameLang(a: String?, b: String?) = a != null && b != null && a.equals(b, true)
+fun sameLang(a: String?, b: String?) = a != null && b != null && langKey(a) == langKey(b)
 
 /** Audio stream index to play: the remembered language, then the default language, then the file's default. */
 fun pickAudio(streams: List<Stream>, mem: TrackMemory?, d: TrackDefaults): Int? {
@@ -24,7 +42,7 @@ fun pickAudio(streams: List<Stream>, mem: TrackMemory?, d: TrackDefaults): Int? 
             .maxWithOrNull(compareBy<Stream> { similarity(it.title ?: it.displayTitle, mem.audioTitle) }.thenBy { -kotlin.math.abs(it.channels - mem.audioChannels) })
             ?.let { return it.index }
     }
-    d.audioLang?.let { lang -> audio.firstOrNull { sameLang(it.language, lang) }?.let { return it.index } }
+    for (lang in d.audioLangs) audio.firstOrNull { sameLang(it.language, lang) }?.let { return it.index }
     return (audio.firstOrNull { it.isDefault } ?: audio.first()).index
 }
 
@@ -40,7 +58,9 @@ fun pickSubtitle(streams: List<Stream>, mem: TrackMemory?, d: TrackDefaults, aud
         if (best != null) return best.index
     }
     if (subs.isEmpty()) return -1
-    val inLang = subs.filter { d.subLang == null || sameLang(it.language, d.subLang) }
+    // The first preferred language that has subtitles, else any.
+    val subLang = d.subLangs.firstOrNull { lang -> subs.any { sameLang(it.language, lang) } }
+    val inLang = subs.filter { subLang == null || sameLang(it.language, subLang) }
     val full = inLang.firstOrNull { !it.isSigns }
     val signs = inLang.firstOrNull { it.isSigns }
     return when (d.subMode) {
@@ -48,8 +68,8 @@ fun pickSubtitle(streams: List<Stream>, mem: TrackMemory?, d: TrackDefaults, aud
         "Always" -> (full ?: inLang.firstOrNull())?.index ?: -1
         "OnlyForced" -> signs?.index ?: -1
         // Subtitles when the audio isn't in the subtitle language, else only signs.
-        "Smart" -> if (d.subLang != null && !sameLang(audioLang, d.subLang)) (full ?: signs)?.index ?: -1 else signs?.index ?: -1
-        else -> (subs.firstOrNull { it.isDefault && (d.subLang == null || sameLang(it.language, d.subLang)) } ?: subs.firstOrNull { it.isForced })?.index ?: -1
+        "Smart" -> if (subLang != null && d.subLangs.none { sameLang(audioLang, it) }) (full ?: signs)?.index ?: -1 else signs?.index ?: -1
+        else -> (subs.firstOrNull { it.isDefault && (subLang == null || sameLang(it.language, subLang)) } ?: subs.firstOrNull { it.isForced })?.index ?: -1
     }
 }
 

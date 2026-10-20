@@ -72,8 +72,9 @@ class Prefs(ctx: Context) {
     var preferTranscodeAv1 by bool("preferTranscodeAv1", false)
 
     // ---- languages ----
-    var audioLang by str("audioLang")
-    var subLang by str("subLang")
+    /** Preferred languages, most wanted first (ISO 639-2 codes). */
+    var audioLangs by list("audioLang")
+    var subLangs by list("subLang")
     /** Jellyfin's SubtitleMode: Default, Always, OnlyForced, None, Smart. Null follows the server user. */
     var subMode by str("subMode")
 
@@ -116,6 +117,7 @@ class Prefs(ctx: Context) {
 
     fun logout() = p.edit().remove("token").remove("userId").remove("addresses").remove("active").remove("pinned").apply()
 
+    private fun list(k: String) = prop({ p.getString(k, null)?.split(',')?.filter { it.isNotBlank() } ?: emptyList() }) { putString(k, it.joinToString(",")) }
     private fun str(k: String, d: String? = null) = prop({ p.getString(k, d) }) { putString(k, it) }
     private fun int(k: String, d: Int) = prop({ p.getInt(k, d) }) { putInt(k, it) }
     private fun float(k: String, d: Float) = prop({ p.getFloat(k, d) }) { putFloat(k, it) }

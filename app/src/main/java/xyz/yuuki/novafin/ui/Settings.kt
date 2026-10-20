@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -65,12 +66,21 @@ import xyz.yuuki.novafin.BuildConfig
 import xyz.yuuki.novafin.Quality
 import xyz.yuuki.novafin.addressKind
 import xyz.yuuki.novafin.normalizeAddress
+import xyz.yuuki.novafin.sameLang
 
-private val languages = listOf(
-    null to "Not set", "eng" to "English", "jpn" to "Japanese", "spa" to "Spanish", "fre" to "French", "ger" to "German", "ita" to "Italian",
-    "por" to "Portuguese", "kor" to "Korean", "chi" to "Chinese", "rus" to "Russian", "ara" to "Arabic", "hin" to "Hindi",
-)
-private val subModes = listOf(null to "Same as server", "Default" to "Default tracks", "Smart" to "When audio is foreign", "Always" to "Always", "OnlyForced" to "Only forced / signs", "None" to "Never")
+/** Every language Java knows, as (ISO 639-2 code, English name), the common ones first. */
+private val allLanguages: List<Pair<String, String>> by lazy {
+    val common = listOf("eng", "jpn", "spa", "fra", "deu", "ita", "por", "kor", "zho", "rus")
+    val all = java.util.Locale.getISOLanguages().mapNotNull { code ->
+        val l = java.util.Locale.forLanguageTag(code)
+        val iso3 = runCatching { l.isO3Language }.getOrNull()?.ifEmpty { null } ?: return@mapNotNull null
+        iso3 to l.getDisplayLanguage(java.util.Locale.ENGLISH)
+    }.distinctBy { it.first }.sortedBy { it.second }
+    all.filter { it.first in common }.sortedBy { common.indexOf(it.first) } + all.filter { it.first !in common }
+}
+
+fun languageName(code: String) = allLanguages.firstOrNull { sameLang(it.first, code) }?.second ?: code
+private val subModes = listOf(null to "Automatic", "Default" to "Default tracks", "Smart" to "When audio is foreign", "Always" to "Always", "OnlyForced" to "Only forced / signs", "None" to "Never")
 private val colors = listOf(0xFFFFFFFF.toInt() to "White", 0xFFFFE9D2.toInt() to "Moon", 0xFFFFEB3B.toInt() to "Yellow", 0xFF8FE3FF.toInt() to "Cyan")
 
 @Composable
@@ -165,11 +175,15 @@ fun SettingsScreen() {
                 Toggle("Convert AV1 on the server", "For phones that stutter on AV1", { p.preferTranscodeAv1 }) { p.preferTranscodeAv1 = it }
 
                 Group("Languages")
-                Choice("Audio language", languages, { p.audioLang }) { p.audioLang = it }
-                Choice("Subtitle language", languages, { p.subLang }) { p.subLang = it }
+                LanguageList("Audio languages", p.serverAudioLang, { p.audioLangs }) { p.audioLangs = it }
+                LanguageList("Subtitle languages", p.serverSubLang, { p.subLangs }) { p.subLangs = it }
                 Choice("Show subtitles", subModes, { p.subMode }) { p.subMode = it }
                 Text(
-                    "Changing tracks in a show or movie is remembered for it and wins over these defaults.",
+                    "Automatic shows your subtitle languages when the audio isn't in one of them, or follows the server when none are set.",
+                    Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodySmall,
+                )
+                Text(
+                    "The first language a video has is used. Changing tracks in a show or movie is remembered for it and wins over these.",
                     Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodySmall,
                 )
 
@@ -375,5 +389,68 @@ private fun AddAddressDialog(onDismiss: () -> Unit, onAdd: (Address) -> Unit) {
             ) { Text(if (busy) "Checking…" else if (unreachable == normalized) "Add anyway" else "Add") }
         },
         dismissButton = { TextButton(onDismiss) { Text("Cancel") } },
+    )
+}
+
+/**
+ * Preferred languages in order: the first one a video has wins. Empty follows the server user's
+ * preference ([server]).
+ */
+@Composable
+private fun LanguageList(title: String, server: String?, get: () -> List<String>, set: (List<String>) -> Unit) {
+    var list by remember { mutableStateOf(get()) }
+    var open by remember { mutableStateOf(false) }
+    var adding by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
+    fun save(l: List<String>) {
+        list = l
+        set(l)
+    }
+    Row2(
+        title,
+        list.joinToString(", ") { languageName(it) }.ifEmpty { server?.ifEmpty { null }?.let { "Server default: ${languageName(it)}" } ?: "Not set" },
+        { open = true; adding = list.isEmpty() },
+    )
+    if (!open) return
+    AlertDialog(
+        { open = false; query = "" },
+        title = { Text(if (adding) "Add a language" else title) },
+        text = {
+            if (adding) Column {
+                OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), placeholder = { Text("Search") }, singleLine = true)
+                LazyColumn(Modifier.padding(top = 8.dp).heightIn(max = 360.dp)) {
+                    val q = query.trim()
+                    // Names starting with the query first, so "engl" finds English before Middle English.
+                    val matches = allLanguages.filter { (code, name) -> code !in list && (q.isEmpty() || name.contains(q, true) || code.startsWith(q, true)) }
+                        .sortedBy { (_, name) -> if (q.isEmpty() || name.startsWith(q, true)) 0 else 1 }
+                    itemsIndexed(matches) { _, (code, name) ->
+                        Text(
+                            name, Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { save(list + code); adding = false; query = "" }.padding(12.dp),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                    }
+                }
+            } else Column {
+                if (list.isEmpty()) Text(
+                    server?.ifEmpty { null }?.let { "None set, so the server's preference (${languageName(it)}) is used." } ?: "None set: the video's default track is used.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                list.forEachIndexed { i, code ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("${i + 1}. ${languageName(code)}", Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                        if (i > 0) IconButton({ save(list.toMutableList().also { it.add(i - 1, it.removeAt(i)) }) }) { Icon(Icons.Rounded.ArrowUpward, "Move up") }
+                        IconButton({ save(list - code) }) { Icon(Icons.Rounded.Delete, "Remove") }
+                    }
+                }
+                if (list.size > 1) Text("The first one a video has is used.", Modifier.padding(top = 4.dp), style = MaterialTheme.typography.bodySmall)
+            }
+        },
+        confirmButton = {
+            if (adding) TextButton({ adding = false; query = "" }) { Text(if (list.isEmpty()) "Close" else "Back") }
+            else Row {
+                TextButton({ adding = true }) { Text("Add language") }
+                TextButton({ open = false }) { Text("Done") }
+            }
+        },
     )
 }

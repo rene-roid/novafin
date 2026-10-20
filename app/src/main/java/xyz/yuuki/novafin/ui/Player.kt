@@ -12,6 +12,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -65,8 +66,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -82,7 +81,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -154,7 +155,8 @@ fun PlayerScreen(activity: PlayerActivity, inPip: Boolean, onClose: () -> Unit) 
         val n = now
         if (casting) CastingBackdrop(n) else {
             ContentFrame(playback.exo, Modifier.fillMaxSize(), contentScale = if (fill) ContentScale.Crop else ContentScale.Fit)
-            Subtitles(inPip)
+            // Lifted above the controls while they show.
+            Subtitles(inPip, raised = controls && !locked && !inPip)
         }
 
         if (!inPip) {
@@ -224,7 +226,7 @@ private fun CastingBackdrop(n: NowPlaying?) {
 
 /** Text and image (PGS) subtitles, styled from settings; ASS keeps its own styling. */
 @Composable
-private fun Subtitles(inPip: Boolean) {
+private fun Subtitles(inPip: Boolean, raised: Boolean) {
     val playback = App.it.playback
     val p = App.it.prefs
     var cues by remember { mutableStateOf(CueGroup.EMPTY_TIME_ZERO) }
@@ -248,7 +250,7 @@ private fun Subtitles(inPip: Boolean) {
                 ),
             )
             v.setFractionalTextSize(SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * p.subSize * if (inPip) 1.4f else 1f)
-            v.setBottomPaddingFraction(p.subBottom)
+            v.setBottomPaddingFraction(p.subBottom + if (raised) .2f else 0f)
             v.setApplyEmbeddedStyles(true)
             v.setCues(cues.cues)
         },
@@ -405,9 +407,15 @@ private fun Controls(
         }
 
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing).padding(horizontal = 16.dp, vertical = 8.dp)) {
-            SeekBar(n, position, duration, buffered, seekPreview, onSeek, onSeekDone)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("${formatTime(seekPreview ?: position)} / ${formatTime(duration)}", style = MaterialTheme.typography.labelMedium)
+                Text(formatTime(seekPreview ?: position), Modifier.width(64.dp), style = MaterialTheme.typography.labelLarge)
+                SeekBar(n, position, duration, buffered, seekPreview, onSeek, onSeekDone, Modifier.weight(1f).padding(horizontal = 8.dp))
+                Text(
+                    "-" + formatTime((duration - (seekPreview ?: position)).coerceAtLeast(0)), Modifier.width(64.dp),
+                    style = MaterialTheme.typography.labelLarge, textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Spacer(Modifier.weight(1f))
                 IconButton(onLock) { Icon(Icons.Rounded.LockOpen, "Lock controls") }
                 IconButton({ activity.toggleRotationLock(); onInteract() }) {
@@ -421,23 +429,61 @@ private fun Controls(
     }
 }
 
-/** Seek bar with the buffered range, chapter ticks and a trickplay thumbnail while dragging. */
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Timeline: thin track with the buffered range, chapters as small gaps, and a thumb that grows while
+ * dragging, with a trickplay thumbnail above it. Tap to jump, drag to scrub; the seek happens on release.
+ */
 @Composable
-private fun SeekBar(n: NowPlaying, position: Long, duration: Long, buffered: Long, preview: Long?, onSeek: (Long) -> Unit, onDone: () -> Unit) {
+private fun SeekBar(
+    n: NowPlaying,
+    position: Long,
+    duration: Long,
+    buffered: Long,
+    preview: Long?,
+    onSeek: (Long) -> Unit,
+    onDone: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val d = duration.coerceAtLeast(1)
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val w = maxWidth
-        if (preview != null) Trickplay(n, preview, Modifier.align(Alignment.BottomStart).offset(x = ((w - 160.dp) * (preview.toFloat() / d)).coerceAtLeast(0.dp), y = (-40).dp))
-        Canvas(Modifier.fillMaxWidth().height(4.dp).align(Alignment.Center)) {
-            drawRect(Color.White.copy(alpha = .3f), size = size.copy(width = size.width * (buffered.toFloat() / d).coerceIn(0f, 1f)))
-            for (c in n.item.chapters) if (c > 0) drawCircle(Moon, 3.dp.toPx(), Offset(size.width * c / d, size.height / 2))
+    var dragging by remember { mutableStateOf(false) }
+    val chapters = remember(n.item.id) { n.item.chapters.filter { it > 0 } }
+    BoxWithConstraints(modifier.height(44.dp)) {
+        val widthPx = constraints.maxWidth.toFloat().coerceAtLeast(1f)
+        fun at(x: Float) = ((x / widthPx).coerceIn(0f, 1f) * d).toLong()
+        val shown = preview ?: position
+        if (preview != null) {
+            val x = (maxWidth - 160.dp) * (preview.toFloat() / d)
+            Trickplay(n, preview, Modifier.align(Alignment.BottomStart).offset(x = x.coerceIn(0.dp, maxWidth - 160.dp), y = (-48).dp))
         }
-        Slider(
-            ((preview ?: position).toFloat() / d).coerceIn(0f, 1f), { onSeek((it * d).toLong()) },
-            onValueChangeFinished = onDone,
-            colors = SliderDefaults.colors(thumbColor = Moon, activeTrackColor = Moon, inactiveTrackColor = Color.White.copy(alpha = .18f)),
-        )
+        Canvas(
+            Modifier.fillMaxSize()
+                .pointerInput(d) { detectTapGestures { onSeek(at(it.x)); onDone() } }
+                .pointerInput(d) {
+                    detectHorizontalDragGestures(
+                        onDragStart = { dragging = true; onSeek(at(it.x)) },
+                        onDragEnd = { dragging = false; onDone() },
+                        onDragCancel = { dragging = false; onDone() },
+                    ) { change, _ ->
+                        change.consume()
+                        onSeek(at(change.position.x))
+                    }
+                },
+        ) {
+            val h = (if (dragging) 6 else 4).dp.toPx()
+            val y = size.height / 2
+            val top = y - h / 2
+            val r = CornerRadius(h / 2)
+            fun bar(to: Float, color: Color) = drawRoundRect(color, Offset(0f, top), Size(size.width * to.coerceIn(0f, 1f), h), r)
+            bar(1f, Color.White.copy(alpha = .22f))
+            bar(buffered.toFloat() / d, Color.White.copy(alpha = .4f))
+            bar(shown.toFloat() / d, Moon)
+            // Chapter boundaries cut small gaps into the track.
+            for (c in chapters) {
+                val cx = size.width * c / d
+                drawRect(Color.Black.copy(alpha = .7f), Offset(cx - 1.dp.toPx(), top), Size(2.dp.toPx(), h))
+            }
+            drawCircle(Moon, (if (dragging) 9 else 7).dp.toPx(), Offset(size.width * (shown.toFloat() / d).coerceIn(0f, 1f), y))
+        }
     }
 }
 

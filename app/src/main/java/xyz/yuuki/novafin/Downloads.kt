@@ -204,7 +204,7 @@ class Downloads(private val app: App) {
 
         // Text subtitles as files: external ones for originals (embedded ones are in the file), the chosen language for transcodes.
         val subLang = streams.firstOrNull { it.index == sub }?.language
-        val wanted = streams.filter { it.isSub && it.isText && (if (original) it.isExternal else subLang != null && it.language == subLang) }
+        val wanted = streams.filter { it.isSub && it.isText && (if (original) it.isExternal else sameLang(it.language, subLang)) }
         for (s in wanted) runCatching {
             val ext = when (s.codec) { "ass", "ssa" -> "ass"; "srt", "subrip" -> "srt"; else -> "vtt" }
             fetch(api.subtitleUrl(item.id, source.id, s.index, ext), File(dir(item.id), "sub-${s.index}.$ext"))

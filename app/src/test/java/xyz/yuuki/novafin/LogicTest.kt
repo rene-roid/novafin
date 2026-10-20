@@ -20,7 +20,7 @@ class LogicTest {
         s(3, "Subtitle", "eng", "Signs & Songs"),
         s(4, "Subtitle", "eng", "Full Subtitles"),
     )
-    private val none = TrackDefaults(null, null, "Default")
+    private val none = TrackDefaults(emptyList(), emptyList(), "Default")
 
     @Test fun remembersJapaneseWithFullSubs() {
         val mem = memoryFor(anime, 2, 4)
@@ -40,21 +40,34 @@ class LogicTest {
 
     @Test fun remembersSubtitlesOff() {
         val mem = memoryFor(anime, 2, -1)
-        assertEquals(-1, pickSubtitle(anime, mem, TrackDefaults(null, "eng", "Always"), "jpn"))
+        assertEquals(-1, pickSubtitle(anime, mem, TrackDefaults(emptyList(), listOf("eng"), "Always"), "jpn"))
     }
 
     @Test fun fallsBackToDefaults() {
         assertEquals(1, pickAudio(anime, null, none))
-        assertEquals(2, pickAudio(anime, null, TrackDefaults("jpn", null, "Default")))
-        assertEquals(4, pickSubtitle(anime, null, TrackDefaults("jpn", "eng", "Smart"), "jpn"))
-        assertEquals(3, pickSubtitle(anime, null, TrackDefaults("eng", "eng", "Smart"), "eng"))
+        assertEquals(2, pickAudio(anime, null, TrackDefaults(listOf("jpn"), emptyList(), "Default")))
+        assertEquals(4, pickSubtitle(anime, null, TrackDefaults(listOf("jpn"), listOf("eng"), "Smart"), "jpn"))
+        assertEquals(3, pickSubtitle(anime, null, TrackDefaults(listOf("eng"), listOf("eng"), "Smart"), "eng"))
         assertEquals(-1, pickSubtitle(anime, null, none, "eng"))
     }
 
     @Test fun rememberedLanguageMissingUsesDefaults() {
         val mem = TrackMemory(audioLang = "spa", subLang = "spa")
         assertEquals(1, pickAudio(anime, mem, none))
-        assertEquals(4, pickSubtitle(anime, mem, TrackDefaults(null, "eng", "Always"), "eng"))
+        assertEquals(4, pickSubtitle(anime, mem, TrackDefaults(emptyList(), listOf("eng"), "Always"), "eng"))
+    }
+
+    @Test fun languagePreferencesInOrder() {
+        // Spanish isn't there, so the second choice wins.
+        assertEquals(2, pickAudio(anime, null, TrackDefaults(listOf("spa", "jpn"), emptyList(), "Default")))
+        // Settings, files and ExoPlayer spell languages differently.
+        assertTrue(sameLang("fre", "fra"))
+        assertTrue(sameLang("en", "eng"))
+        assertTrue(sameLang("ja", "jpn"))
+        assertFalse(sameLang("eng", "jpn"))
+        val french = listOf(s(1, "Audio", "fre"), s(2, "Subtitle", "fre", "Full"), s(3, "Subtitle", "eng", "Full"))
+        assertEquals(1, pickAudio(french, null, TrackDefaults(listOf("fra"), emptyList(), "Default")))
+        assertEquals(3, pickSubtitle(french, null, TrackDefaults(emptyList(), listOf("spa", "eng"), "Always"), "fre"))
     }
 
     @Test fun syncNewerWins() {
