@@ -1,5 +1,9 @@
-<img src="assets/icon.svg" width="64" height="64" alt="">
+<img src="assets/icon.png" width="96" height="96" alt="">
 
-# novafin
+# Novafin
 
-Created in [T3 Code](https://t3.codes).
+A Jellyfin client for Android phones and tablets, focused on video: direct play and transcoding,
+downloads with offline progress sync, picture-in-picture, Chromecast, and per-show audio and
+subtitle memory.
+
+Planning stage: see [PLAN.md](PLAN.md) for the feature list, design and implementation order.
