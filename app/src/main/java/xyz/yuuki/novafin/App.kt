@@ -115,7 +115,7 @@ class App : Application(), SingletonImageLoader.Factory {
     val streamQuality get() = Quality.of(if (metered) prefs.qualityMobile else prefs.qualityWifi)
 
     override fun newImageLoader(context: PlatformContext) = ImageLoader.Builder(context)
-        .crossfade(300)
+        .crossfade(150)
         .diskCache { DiskCache.Builder().directory(cacheDir.resolve("images")).maxSizeBytes(prefs.imageCacheMb * 1024L * 1024).build() }
         .components { add(OkHttpNetworkFetcherFactory(callFactory = { api.http })) }
         .build()

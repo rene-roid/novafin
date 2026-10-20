@@ -11,7 +11,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -75,7 +74,7 @@ import xyz.yuuki.novafin.ui.AddressesScreen
 import xyz.yuuki.novafin.ui.Bg
 import xyz.yuuki.novafin.ui.DetailsScreen
 import xyz.yuuki.novafin.ui.DownloadsScreen
-import xyz.yuuki.novafin.ui.LocalShared
+import xyz.yuuki.novafin.ui.Dusk
 import xyz.yuuki.novafin.ui.HomeScreen
 import xyz.yuuki.novafin.ui.LibraryScreen
 import xyz.yuuki.novafin.ui.LocalNav
@@ -155,8 +154,8 @@ private fun Shell() {
             Column(Modifier.weight(1f)) {
                 AnimatedVisibility(!online) {
                     Text(
-                        "Offline · showing downloads", Modifier.fillMaxWidth().background(Raised2).statusBarsPadding().padding(4.dp),
-                        color = Color.White, style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center,
+                        "Offline · showing downloads", Modifier.fillMaxWidth().background(Dusk.copy(alpha = .9f)).statusBarsPadding().padding(4.dp),
+                        color = Bg, style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center,
                     )
                 }
                 // The offline banner already covers the status bar.
@@ -166,31 +165,26 @@ private fun Shell() {
                         Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.statusBars).zIndex(1f)
                             .background(Brush.verticalGradient(listOf(Bg.copy(alpha = .8f), Color.Transparent))),
                     )
-                    SharedTransitionLayout {
-                        CompositionLocalProvider(LocalShared provides this) {
-                            NavDisplay(
-                                backStack = nav.stack,
-                                sharedTransitionScope = this,
-                                onBack = { nav.back() },
-                                transitionSpec = { (slideInHorizontally(tween(260)) { it / 5 } + fadeIn(tween(260))) togetherWith fadeOut(tween(160)) },
-                                popTransitionSpec = { fadeIn(tween(200)) togetherWith (slideOutHorizontally(tween(220)) { it / 5 } + fadeOut(tween(220))) },
-                                predictivePopTransitionSpec = { fadeIn(tween(200)) togetherWith (slideOutHorizontally(tween(220)) { it / 5 } + fadeOut(tween(220))) },
-                                entryProvider = { r ->
-                                    NavEntry(r) {
-                                        when (r) {
-                                            Route.Home -> HomeScreen()
-                                            Route.Library -> LibraryScreen()
-                                            Route.Search -> SearchScreen()
-                                            Route.Downloads -> DownloadsScreen()
-                                            Route.Settings -> SettingsScreen()
-                                            Route.Addresses -> AddressesScreen()
-                                            is Route.Details -> DetailsScreen(r.id)
-                                        }
-                                    }
-                                },
-                            )
-                        }
-                    }
+                    NavDisplay(
+                        backStack = nav.stack,
+                        onBack = { nav.back() },
+                        transitionSpec = { (slideInHorizontally(tween(260)) { it / 5 } + fadeIn(tween(260))) togetherWith fadeOut(tween(160)) },
+                        popTransitionSpec = { fadeIn(tween(200)) togetherWith (slideOutHorizontally(tween(220)) { it / 5 } + fadeOut(tween(220))) },
+                        predictivePopTransitionSpec = { fadeIn(tween(200)) togetherWith (slideOutHorizontally(tween(220)) { it / 5 } + fadeOut(tween(220))) },
+                        entryProvider = { r ->
+                            NavEntry(r) {
+                                when (r) {
+                                    Route.Home -> HomeScreen()
+                                    Route.Library -> LibraryScreen()
+                                    Route.Search -> SearchScreen()
+                                    Route.Downloads -> DownloadsScreen()
+                                    Route.Settings -> SettingsScreen()
+                                    Route.Addresses -> AddressesScreen()
+                                    is Route.Details -> DetailsScreen(r.id)
+                                }
+                            }
+                        },
+                    )
                 }
                 if (!tablet) Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = .05f)))
                 if (!tablet) NavigationBar(containerColor = Bg.copy(alpha = .94f)) {

@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -44,11 +43,11 @@ import androidx.compose.material.icons.rounded.VolumeUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -67,9 +66,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -119,27 +116,30 @@ private fun Details(item: Item, refresh: () -> Unit) {
         runCatching { App.it.api.seasons(sid) }.getOrElse { App.it.downloads.offlineSeasons(sid).ifEmpty { throw it } }
     } else null
 
-    if (tablet) BoxWithConstraints(Modifier.fillMaxSize()) {
-        // Full-bleed backdrop with the details over its darker left side, like a streaming service.
-        val list = androidx.compose.foundation.lazy.rememberLazyListState()
-        Picture(item.backdrop ?: item.thumb, 1600.dp, Modifier.fillMaxSize().sharedArt(item.id).fadeOut())
-        Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0f to Bg, .4f to Bg.copy(alpha = .8f), .75f to Color.Transparent)))
-        // Darkens over the picture as the page scrolls, so the episode list stays readable.
-        Box(Modifier.fillMaxSize().graphicsLayer {
-            alpha = if (list.firstVisibleItemIndex > 0) 1f else (list.firstVisibleItemScrollOffset / 600f).coerceIn(0f, 1f)
-        }.background(Bg.copy(alpha = .92f)))
-        LazyColumn(Modifier.fillMaxSize(), list, contentPadding = PaddingValues(start = 32.dp, end = 32.dp, top = maxHeight * .34f, bottom = 32.dp)) {
-            item { Column(Modifier.widthIn(max = 640.dp)) { Title(item); Actions(item, refresh) } }
-            body(item, seasons, refresh)
+    if (tablet) {
+        // Two panes: artwork and actions on the left, everything else on the right.
+        Box(Modifier.fillMaxSize()) {
+            Picture(item.backdrop ?: item.thumb, 1600.dp, Modifier.fillMaxSize().clip(RoundedCornerShape(0.dp)))
+            Box(Modifier.fillMaxSize().background(Bg.copy(alpha = .82f)))
+            Row(Modifier.fillMaxSize()) {
+                LazyColumn(Modifier.width(360.dp).fillMaxSize(), contentPadding = PaddingValues(24.dp)) {
+                    item { BackBar(Modifier.padding(bottom = 12.dp)) }
+                    item { Picture(if (item.isEpisode) item.thumb else item.poster ?: item.thumb, 320.dp, Modifier.fillMaxWidth().aspectRatio(if (item.isEpisode) 16f / 9 else 2f / 3).clip(RoundedCornerShape(12.dp))) }
+                    item { Gap(16.dp); Actions(item, refresh) }
+                }
+                LazyColumn(Modifier.weight(1f).fillMaxSize(), contentPadding = PaddingValues(top = 48.dp, end = 24.dp, bottom = 32.dp)) {
+                    item { Title(item) }
+                    body(item, seasons, refresh)
+                }
+            }
         }
-        BackBar(Modifier.padding(start = 16.dp))
     } else Box(Modifier.fillMaxSize()) {
         // The artwork's colours light the page behind the title and buttons.
         val list = androidx.compose.foundation.lazy.rememberLazyListState()
         AmbientLight(item.backdrop ?: item.thumb, Modifier.fillMaxWidth().height(720.dp).scrollsWith(list))
         LazyColumn(Modifier.fillMaxSize(), list, contentPadding = PaddingValues(bottom = 32.dp)) {
             item {
-                Box(Modifier.fillMaxWidth().aspectRatio(16f / 10).sharedArt(item.id)) {
+                Box(Modifier.fillMaxWidth().aspectRatio(16f / 10)) {
                     Picture(item.backdrop ?: item.thumb, 800.dp, Modifier.fillMaxSize().fadeOut())
                     TopScrim()
                     BackBar()
@@ -155,11 +155,10 @@ private fun Details(item: Item, refresh: () -> Unit) {
 @Composable
 private fun Title(item: Item) {
     Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        // The show's logo where the server has one; episodes show it above their own title.
-        val logo = item.logo
-        if (logo != null) AsyncImage(imageModel(logo, 320.dp), item.seriesName ?: item.name, Modifier.height(if (item.isEpisode) 56.dp else 88.dp).widthIn(max = 320.dp), contentScale = ContentScale.Fit, alignment = Alignment.CenterStart)
-        else if (item.isEpisode) Text(item.seriesName ?: "", style = MaterialTheme.typography.titleMedium, color = Sub)
-        if (logo == null || item.isEpisode) Text(item.name, style = MaterialTheme.typography.headlineMedium)
+        if (item.isEpisode) Text(item.seriesName ?: "", style = MaterialTheme.typography.titleMedium, color = Dusk)
+        val logo = item.logo?.takeIf { !item.isEpisode }
+        if (logo != null) AsyncImage(imageModel(logo, 320.dp), item.name, Modifier.height(80.dp).widthIn(max = 320.dp), contentScale = ContentScale.Fit, alignment = Alignment.CenterStart)
+        else Text(item.name, style = MaterialTheme.typography.headlineMedium)
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             val bits = listOfNotNull(
                 item.episodeLabel, item.year?.toString(), item.officialRating,
@@ -213,7 +212,7 @@ private fun Actions(item: Item, refresh: () -> Unit) {
                         },
                     )
                 }
-                if (resumeAt != null && !item.isSeries) FilledTonalButton({ play(target, 0, audio, sub) }) {
+                if (resumeAt != null && !item.isSeries) OutlinedButton({ play(target, 0, audio, sub) }) {
                     Icon(Icons.Rounded.Replay, null)
                     Spacer(Modifier.width(6.dp))
                     Text("Start over")
@@ -226,7 +225,7 @@ private fun Actions(item: Item, refresh: () -> Unit) {
             FilledTonalIconButton({
                 fav = !fav
                 scope.launch { runCatching { app.api.setFavorite(item.id, fav) }.onFailure { fav = !fav } }
-            }) { Icon(if (fav) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder, "Favourite", tint = if (fav) Moon else Color.White) }
+            }) { Icon(if (fav) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder, "Favourite", tint = if (fav) Dusk else Color.White) }
             if (item.playable || item.isSeries || item.isSeason) {
                 val state = dl[item.id]
                 FilledTonalIconButton({ if (state?.done == true) app.downloads.remove(item.id) else downloading = true }) {
@@ -260,7 +259,7 @@ private fun TrackPicker(icon: androidx.compose.ui.graphics.vector.ImageVector, s
     if (streams.isEmpty()) return
     var open by remember { mutableStateOf(false) }
     Box {
-        FilledTonalButton({ open = true }, contentPadding = PaddingValues(horizontal = 14.dp)) {
+        OutlinedButton({ open = true }, contentPadding = PaddingValues(horizontal = 12.dp)) {
             Icon(icon, null, Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp))
             Text(streams.firstOrNull { it.index == selected }?.displayTitle ?: "Off", maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 220.dp))
@@ -318,7 +317,7 @@ private fun Seasons(item: Item, seasons: Load<List<Item>>) {
         val chips = androidx.compose.foundation.lazy.rememberLazyListState()
         LaunchedEffect(list.size) { list.indexOfFirst { it.id == season?.id }.takeIf { it > 0 }?.let { chips.scrollToItem(it) } }
         LazyRow(state = chips, contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(list, key = { it.id }) { s -> Pill(s.id == season?.id, { selected = s.id }, { Text(s.name) }) }
+            items(list, key = { it.id }) { s -> FilterChip(s.id == season?.id, { selected = s.id }, { Text(s.name) }) }
         }
         if (season != null) {
             val eps = rememberLoad("episodes:${season.id}") {

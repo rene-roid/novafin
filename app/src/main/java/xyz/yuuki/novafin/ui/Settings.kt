@@ -296,7 +296,7 @@ fun AddressesScreen() {
             val ms = latency[a.url]
             val known = a.url in latency
             Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(10.dp).clip(CircleShape).background(when { !known -> Faint; ms == null -> Color(0xFFE57373); else -> Color(0xFF7EE0A1) }))
+                Box(Modifier.size(10.dp).clip(CircleShape).background(when { !known -> Faint; ms == null -> Dusk; else -> Color(0xFF7EE0A1) }))
                 Column(Modifier.weight(1f).padding(start = 12.dp)) {
                     Text(a.label + if (a.url == active) " · in use" else "", style = MaterialTheme.typography.titleSmall, color = if (a.url == active) Moon else Color.White)
                     Text(a.url, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -356,7 +356,7 @@ private fun AddAddressDialog(onDismiss: () -> Unit, onAdd: (Address) -> Unit) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(url, { url = it; error = null }, label = { Text("Address") }, placeholder = { Text("https://jellyfin.example.com") }, singleLine = true)
                 OutlinedTextField(label, { label = it }, label = { Text("Label (optional)") }, placeholder = { Text(addressKind(normalized).name) }, singleLine = true)
-                if (insecure) Text("Plain http over the internet sends your login unencrypted. Use https for public addresses.", color = Moon, style = MaterialTheme.typography.bodySmall)
+                if (insecure) Text("Plain http over the internet sends your login unencrypted. Use https for public addresses.", color = Dusk, style = MaterialTheme.typography.bodySmall)
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             }
         },

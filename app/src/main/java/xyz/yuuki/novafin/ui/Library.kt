@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -110,18 +111,18 @@ fun LibraryScreen() {
                 if (views.error != null && all.isEmpty()) ErrorState(views.error, views.refresh)
                 LazyRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(all, key = { it.id }) { v ->
-                        Pill(v.id == view?.id, { LibraryState.selected = v.id }, { Text(v.name) }, shape = RoundedCornerShape(20.dp))
+                        FilterChip(v.id == view?.id, { LibraryState.selected = v.id }, { Text(v.name) }, shape = RoundedCornerShape(20.dp))
                     }
                 }
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(sorts) { (label, value) ->
-                        Pill(sort == value, {
+                        FilterChip(sort == value, {
                             sort = value
                             view?.let { prefs.setSort(it.id, value) }
                         }, { Text(label) })
                     }
-                    item { Pill(filter == "IsUnplayed", { filter = if (filter == "IsUnplayed") null else "IsUnplayed" }, { Text("Unwatched") }) }
-                    item { Pill(filter == "IsFavorite", { filter = if (filter == "IsFavorite") null else "IsFavorite" }, { Text("Favourites") }) }
+                    item { FilterChip(filter == "IsUnplayed", { filter = if (filter == "IsUnplayed") null else "IsUnplayed" }, { Text("Unwatched") }) }
+                    item { FilterChip(filter == "IsFavorite", { filter = if (filter == "IsFavorite") null else "IsFavorite" }, { Text("Favourites") }) }
                 }
                 if (total >= 0) Text("$total titles", Modifier.padding(vertical = 4.dp), style = MaterialTheme.typography.bodySmall)
             }
