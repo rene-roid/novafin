@@ -6,6 +6,8 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -105,6 +107,29 @@ class Nav {
 }
 
 val LocalNav = staticCompositionLocalOf<Nav> { error("no nav") }
+
+/** Lets artwork move between pages: a poster grows into the backdrop of the page it opens. */
+@OptIn(ExperimentalSharedTransitionApi::class)
+val LocalShared = staticCompositionLocalOf<SharedTransitionScope?> { null }
+
+@OptIn(ExperimentalSharedTransitionApi::class)
+@Composable
+fun Modifier.sharedArt(itemId: String): Modifier {
+    val shared = LocalShared.current ?: return this
+    val scope = androidx.navigation3.ui.LocalNavAnimatedContentScope.current
+    return with(shared) { this@sharedArt.sharedBounds(rememberSharedContentState("art-$itemId"), scope) }
+}
+
+/** A soft grey pill for filters and choices: filled when selected, no outline. */
+@Composable
+fun Pill(selected: Boolean, onClick: () -> Unit, label: @Composable () -> Unit, shape: androidx.compose.ui.graphics.Shape = CircleShape) {
+    androidx.compose.material3.FilterChip(
+        selected, onClick, label, shape = shape, border = null,
+        colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(
+            containerColor = Raised, labelColor = Sub, selectedContainerColor = Color.White, selectedLabelColor = Bg,
+        ),
+    )
+}
 
 // ---- layout ---------------------------------------------------------------------------------
 
@@ -214,7 +239,7 @@ fun ProgressLine(item: Item, modifier: Modifier = Modifier) {
 @Composable
 fun PosterCard(item: Item, width: Dp, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Column(modifier.width(width).pressable(onClick).clip(cardShape)) {
-        Box(Modifier.fillMaxWidth().aspectRatio(2f / 3).clip(cardShape).border(1.dp, rim, cardShape)) {
+        Box(Modifier.fillMaxWidth().aspectRatio(2f / 3).sharedArt(item.id).clip(cardShape).border(1.dp, rim, cardShape)) {
             Picture(if (item.isEpisode) item.poster else item.poster ?: item.thumb, width, Modifier.fillMaxSize())
             Badges(item, Modifier.align(Alignment.TopEnd))
             ProgressLine(item, Modifier.align(Alignment.BottomCenter))
@@ -231,7 +256,7 @@ fun PosterCard(item: Item, width: Dp, modifier: Modifier = Modifier, onClick: ()
 @Composable
 fun ThumbCard(item: Item, width: Dp, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Column(modifier.width(width).pressable(onClick).clip(cardShape)) {
-        Box(Modifier.fillMaxWidth().aspectRatio(16f / 9).clip(cardShape).border(1.dp, rim, cardShape)) {
+        Box(Modifier.fillMaxWidth().aspectRatio(16f / 9).sharedArt(item.id).clip(cardShape).border(1.dp, rim, cardShape)) {
             Picture(item.thumb ?: item.poster, width, Modifier.fillMaxSize())
             Badges(item, Modifier.align(Alignment.TopEnd))
             ProgressLine(item, Modifier.align(Alignment.BottomCenter))

@@ -60,7 +60,6 @@ import androidx.compose.material.icons.rounded.VolumeUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -385,7 +384,10 @@ private fun Controls(
 ) {
     val playback = App.it.playback
     val player = playback.player
-    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .45f))) {
+    Box(Modifier.fillMaxSize()) {
+        // Shade only the top and bottom, where the controls are; the picture stays clear.
+        Box(Modifier.fillMaxWidth().fillMaxHeight(.3f).align(Alignment.TopCenter).background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = .75f), Color.Transparent))))
+        Box(Modifier.fillMaxWidth().fillMaxHeight(.4f).align(Alignment.BottomCenter).background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = .85f)))))
         // Top: back, title, cast, tracks, settings.
         Row(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing).padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClose) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Close player") }
@@ -522,7 +524,7 @@ private fun Trickplay(n: NowPlaying, at: Long, modifier: Modifier) {
 private fun SegmentButton(n: NowPlaying, position: Long, modifier: Modifier) {
     val seg = n.segments.firstOrNull { it.type in setOf("Intro", "Recap") && position in it.startMs until it.endMs - 1_000 } ?: return
     if (App.it.prefs.autoSkipIntro) return
-    OutlinedButton({ App.it.playback.skip(seg) }, modifier, colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(containerColor = Bg.copy(alpha = .7f))) {
+    Button({ App.it.playback.skip(seg) }, modifier) {
         Text(if (seg.type == "Recap") "Skip recap" else "Skip intro")
     }
 }
@@ -600,7 +602,7 @@ private fun SettingsSheet(n: NowPlaying, onDismiss: () -> Unit) {
             item {
                 Text("Speed", Modifier.padding(vertical = 8.dp), style = MaterialTheme.typography.titleMedium, color = Accent)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    for (s in listOf(.5f, .75f, 1f, 1.25f, 1.5f, 2f)) FilterChip(speed == s, { speed = s; playback.player.setPlaybackSpeed(s) }, { Text("${s}×") })
+                    for (s in listOf(.5f, .75f, 1f, 1.25f, 1.5f, 2f)) Pill(speed == s, { speed = s; playback.player.setPlaybackSpeed(s) }, { Text("${s}×") })
                 }
                 Text("Quality", Modifier.padding(top = 16.dp, bottom = 4.dp), style = MaterialTheme.typography.titleMedium, color = Accent)
                 Text(

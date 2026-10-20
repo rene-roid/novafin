@@ -39,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -87,14 +88,11 @@ fun HomeScreen() {
     val tablet = isTablet()
     val play = rememberPlay()
 
-    // Phones: what you're watching tints the top of Home (tablets show it as the hero instead).
-    val tint = load.data?.let { it.resume.firstOrNull() ?: it.nextUp.firstOrNull() }
-    if (!tablet && tint != null) AmbientLight(tint.backdrop ?: tint.thumb, Modifier.fillMaxWidth().height(560.dp).scrollsWith(list))
     PullToRefreshBox(load.loading && load.data != null, load.refresh, Modifier.fillMaxSize()) {
         LazyColumn(Modifier.fillMaxSize(), list, contentPadding = PaddingValues(bottom = 24.dp)) {
             val d = load.data
             val hero = d?.resume?.firstOrNull() ?: d?.nextUp?.firstOrNull()
-            if (tablet && hero != null) item { Hero(hero) { play(hero, null, null, null) } }
+            if (hero != null) item { Hero(hero, tablet) { play(hero, null, null, null) } }
             else item { Header("Home") }
             when {
                 d != null -> {
@@ -115,21 +113,29 @@ fun HomeScreen() {
     }
 }
 
-/** Tablet home: a large backdrop for what to resume. */
+/** The top of Home: a full-width backdrop for what to watch now, with the show's logo. */
 @Composable
-private fun Hero(item: Item, onPlay: () -> Unit) {
+private fun Hero(item: Item, tablet: Boolean, onPlay: () -> Unit) {
     val nav = LocalNav.current
-    Box(Modifier.fillMaxWidth().heightIn(min = 380.dp).height(460.dp).clickable { nav.open(item) }) {
-        AmbientLight(item.backdrop ?: item.thumb, Modifier.fillMaxSize().offset(y = 120.dp))
-        Picture(item.backdrop ?: item.thumb, 1600.dp, Modifier.fillMaxSize().fadeOut())
+    Box(Modifier.fillMaxWidth().height(if (tablet) 460.dp else 500.dp).clickable { nav.open(item) }) {
+        Picture(item.backdrop ?: item.thumb, if (tablet) 1600.dp else 900.dp, Modifier.fillMaxSize().fadeOut())
+        // Dark behind the text, whatever the artwork looks like.
+        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Color.Transparent, .35f to Color.Transparent, .8f to Bg.copy(alpha = .85f), 1f to Bg)))
+        if (tablet) Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0f to Bg.copy(alpha = .7f), .55f to Color.Transparent)))
         TopScrim()
         Header("", Modifier.align(Alignment.TopStart))
-        Column(Modifier.align(Alignment.BottomStart).padding(32.dp).widthIn(max = 560.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(
+            Modifier.align(Alignment.BottomStart).padding(horizontal = if (tablet) 32.dp else 20.dp, vertical = 16.dp).widthIn(max = 560.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
             val logo = item.logo
-            if (logo != null) AsyncImage(imageModel(logo, 360.dp), item.seriesName ?: item.name, Modifier.height(96.dp).widthIn(max = 360.dp), contentScale = ContentScale.Fit, alignment = Alignment.BottomStart)
+            if (logo != null) AsyncImage(
+                imageModel(logo, 360.dp), item.seriesName ?: item.name,
+                Modifier.height(if (tablet) 96.dp else 72.dp).widthIn(max = if (tablet) 360.dp else 260.dp), contentScale = ContentScale.Fit, alignment = Alignment.BottomStart,
+            )
             else Text(item.seriesName ?: item.name, style = MaterialTheme.typography.displaySmall)
             Text(listOfNotNull(item.episodeLabel, item.name.takeIf { item.isEpisode }).joinToString(" · "), style = MaterialTheme.typography.titleMedium, color = Sub)
-            item.overview?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = Sub, maxLines = 3, overflow = TextOverflow.Ellipsis) }
+            item.overview?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = Sub, maxLines = if (tablet) 3 else 2, overflow = TextOverflow.Ellipsis) }
             Button(onPlay, Modifier.glow()) {
                 Icon(Icons.Rounded.PlayArrow, null)
                 Spacer(Modifier.width(6.dp))
