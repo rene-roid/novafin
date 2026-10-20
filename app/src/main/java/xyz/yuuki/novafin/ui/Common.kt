@@ -28,6 +28,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.DownloadDone
 import androidx.compose.material3.Icon
@@ -325,3 +327,35 @@ fun rememberPlay(): (Item, Long?, Int?, Int?) -> Unit {
 
 @Composable
 fun Gap(h: Dp) = Spacer(Modifier.height(h))
+
+/** While something plays on a Chromecast: what it is, play/pause, and a tap back to the remote. */
+@Composable
+fun CastBar() {
+    val playback = App.it.playback
+    val casting by playback.casting.collectAsStateWithLifecycle()
+    val now by playback.now.collectAsStateWithLifecycle()
+    val n = now ?: return
+    if (!casting) return
+    val ctx = LocalContext.current
+    var playing by remember { mutableStateOf(playback.player.isPlaying) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            playing = playback.player.isPlaying
+            kotlinx.coroutines.delay(500)
+        }
+    }
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp).clip(RoundedCornerShape(14.dp)).background(Raised2.copy(alpha = .92f))
+            .clickable { ctx.startActivity(Intent(ctx, PlayerActivity::class.java)) }.padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Picture(n.item.thumb ?: n.item.poster, 96.dp, Modifier.width(80.dp).aspectRatio(16f / 9).clip(RoundedCornerShape(8.dp)))
+        Column(Modifier.weight(1f)) {
+            Text(n.item.seriesName ?: n.item.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("Playing on ${playback.castDeviceName() ?: "TV"}", style = MaterialTheme.typography.bodySmall, color = Glow, maxLines = 1)
+        }
+        androidx.compose.material3.IconButton({ if (playing) playback.player.pause() else playback.player.play() }) {
+            Icon(if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, if (playing) "Pause" else "Play")
+        }
+    }
+}

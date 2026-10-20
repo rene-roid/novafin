@@ -18,6 +18,17 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.rounded.Cast
+import androidx.compose.material.icons.rounded.PhoneAndroid
+import androidx.compose.material.icons.rounded.SkipPrevious
+import androidx.compose.material.icons.rounded.Stop
+import androidx.compose.material.icons.rounded.VolumeDown
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -151,6 +162,20 @@ fun PlayerScreen(activity: PlayerActivity, inPip: Boolean, onClose: () -> Unit) 
     }
     LaunchedEffect(gestureLabel) { if (gestureLabel != null) { delay(900); gestureLabel = null } }
 
+    val n0 = now
+    if (casting && !inPip && n0 != null) {
+        RemoteScreen(
+            n0, position, duration, buffered, playing, loading || buffering, seekPreview,
+            onSeek = { seekPreview = it },
+            onSeekDone = { seekPreview?.let(player::seekTo); seekPreview = null },
+            onClose = onClose, onSheet = { sheet = it },
+        )
+        when (sheet) {
+            "tracks" -> TracksSheet(n0) { sheet = null }
+        }
+        return
+    }
+
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         val n = now
         if (casting) CastingBackdrop(n) else {
@@ -221,6 +246,127 @@ private fun CastingBackdrop(n: NowPlaying?) {
         Picture(n?.item?.backdrop ?: n?.item?.thumb, 1280.dp, Modifier.fillMaxSize())
         Box(Modifier.fillMaxSize().background(Bg.copy(alpha = .75f)))
         Text("Playing on your TV", Modifier.align(Alignment.Center), style = MaterialTheme.typography.headlineSmall, color = Glow)
+    }
+}
+
+/**
+ * While casting the phone is a remote, not a screen: the artwork over the night sky, the TV's name,
+ * the timeline, playback buttons, the TV's volume, tracks, and moving playback back to the phone.
+ * Works in any orientation; the TV keeps playing when this screen closes or the phone sleeps.
+ */
+@Composable
+private fun RemoteScreen(
+    n: NowPlaying,
+    position: Long,
+    duration: Long,
+    buffered: Long,
+    playing: Boolean,
+    busy: Boolean,
+    seekPreview: Long?,
+    onSeek: (Long) -> Unit,
+    onSeekDone: () -> Unit,
+    onClose: () -> Unit,
+    onSheet: (String) -> Unit,
+) {
+    val playback = App.it.playback
+    val player = playback.player
+    val device = remember(n.item.id) { playback.castDeviceName() ?: "your TV" }
+    val canVolume = player.isCommandAvailable(Player.COMMAND_SET_DEVICE_VOLUME_WITH_FLAGS)
+    val maxVolume = player.deviceInfo.maxVolume.takeIf { it > 0 } ?: 20
+    var volume by remember { mutableFloatStateOf(player.deviceVolume.toFloat()) }
+    var adjusting by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            if (!adjusting) volume = player.deviceVolume.toFloat()
+            delay(500)
+        }
+    }
+
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        Cosmos(Modifier.fillMaxSize())
+        val wide = maxWidth > maxHeight
+        val art: @Composable (Modifier) -> Unit = { m ->
+            val landscape = n.item.isEpisode || n.item.poster == null
+            Picture(
+                if (landscape) n.item.thumb ?: n.item.backdrop else n.item.poster, 360.dp,
+                m.aspectRatio(if (landscape) 16f / 9 else 2f / 3).clip(RoundedCornerShape(16.dp)),
+            )
+        }
+        val info: @Composable ColumnScope.() -> Unit = {
+            Text(n.item.seriesName ?: n.item.name, style = MaterialTheme.typography.headlineSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (n.item.isEpisode) Text("${n.item.episodeLabel} · ${n.item.name}", style = MaterialTheme.typography.bodyLarge, color = Sub, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+        val controls: @Composable ColumnScope.() -> Unit = {
+            SeekBar(n, position, duration, buffered, seekPreview, onSeek, onSeekDone, Modifier.fillMaxWidth())
+            Row(Modifier.fillMaxWidth()) {
+                Text(formatTime(seekPreview ?: position), style = MaterialTheme.typography.labelLarge, color = Sub)
+                Spacer(Modifier.weight(1f))
+                Text("-" + formatTime((duration - (seekPreview ?: position)).coerceAtLeast(0)), style = MaterialTheme.typography.labelLarge, color = Sub)
+            }
+            Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+                IconButton({ player.seekTo(0) }) { Icon(Icons.Rounded.SkipPrevious, "Start over", Modifier.size(30.dp)) }
+                IconButton({ player.seekBack() }, Modifier.size(56.dp)) { Icon(Icons.Rounded.Replay10, "Back 10 seconds", Modifier.size(36.dp)) }
+                Box(
+                    Modifier.size(80.dp).clip(CircleShape).background(AuroraBrush).clickable { if (playing) player.pause() else player.play() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (busy && !playing) CircularProgressIndicator(Modifier.size(36.dp), color = Bg, strokeWidth = 3.dp)
+                    else Icon(if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, if (playing) "Pause" else "Play", Modifier.size(46.dp), tint = Bg)
+                }
+                IconButton({ player.seekForward() }, Modifier.size(56.dp)) { Icon(Icons.Rounded.Forward10, "Forward 10 seconds", Modifier.size(36.dp)) }
+                IconButton({ playback.playNext() }, enabled = n.next != null) { Icon(Icons.Rounded.SkipNext, "Next episode", Modifier.size(30.dp)) }
+            }
+            if (canVolume) Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.VolumeDown, null, tint = Sub)
+                Slider(
+                    volume, { adjusting = true; volume = it; player.setDeviceVolume(it.roundToInt(), 0) },
+                    Modifier.weight(1f).padding(horizontal = 8.dp), valueRange = 0f..maxVolume.toFloat(),
+                    onValueChangeFinished = { adjusting = false },
+                    colors = SliderDefaults.colors(thumbColor = Glow, activeTrackColor = Glow, inactiveTrackColor = Color.White.copy(alpha = .18f)),
+                )
+                Icon(Icons.Rounded.VolumeUp, "TV volume", tint = Sub)
+            }
+            Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)) {
+                FilledTonalButton({ onSheet("tracks") }) {
+                    Icon(Icons.Rounded.Subtitles, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Audio & subtitles")
+                }
+                FilledTonalButton({ playback.playHere() }) {
+                    Icon(Icons.Rounded.PhoneAndroid, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Play here")
+                }
+                IconButton({ playback.stop(); onClose() }) { Icon(Icons.Rounded.Stop, "Stop playing on the TV") }
+            }
+        }
+
+        Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+            Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClose) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back to the app; the TV keeps playing") }
+                Icon(Icons.Rounded.Cast, null, Modifier.padding(start = 8.dp).size(18.dp), tint = Glow)
+                Text("Playing on $device", Modifier.padding(start = 8.dp).weight(1f), style = MaterialTheme.typography.titleSmall, color = Glow, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                MediaRouteButton(Modifier.size(48.dp))
+            }
+            if (wide) Row(Modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 16.dp), horizontalArrangement = Arrangement.spacedBy(32.dp), verticalAlignment = Alignment.CenterVertically) {
+                art(Modifier.weight(1f).fillMaxHeight(.8f))
+                Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    info()
+                    Spacer(Modifier.height(16.dp))
+                    controls()
+                }
+            } else Column(
+                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Spacer(Modifier.height(16.dp))
+                art(Modifier.fillMaxWidth(if (n.item.isEpisode) 1f else .62f))
+                Spacer(Modifier.height(20.dp))
+                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start) { info() }
+                Spacer(Modifier.height(20.dp))
+                controls()
+            }
+        }
     }
 }
 

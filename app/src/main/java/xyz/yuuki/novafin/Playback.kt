@@ -389,7 +389,9 @@ class Playback(private val app: App) {
     fun selectAudio(index: Int) {
         val n = now.value ?: return
         prefs.remember(n.item.memoryKey, memoryFor(n.streams, index, n.sub))
-        if (n.method == Method.DirectPlay || (n.method == Method.Offline && n.item.json.optJSONObject("Download")?.optBoolean("original") == true)) {
+        // The TV gets a new stream with the chosen track; locally the file's tracks switch in place.
+        if (casting.value) load(n.item, player.currentPosition, index, n.sub, n.quality)
+        else if (n.method == Method.DirectPlay || (n.method == Method.Offline && n.item.json.optJSONObject("Download")?.optBoolean("original") == true)) {
             now.value = n.copy(audio = index)
             applyTracks()
         } else if (n.method != Method.Offline) load(n.item, player.currentPosition, index, n.sub, n.quality)
@@ -402,7 +404,7 @@ class Playback(private val app: App) {
         prefs.remember(n.item.memoryKey, memoryFor(n.streams, n.audio, index))
         val burned = n.method == Method.Transcode && listOf(index, n.sub).any { i -> n.streams.firstOrNull { it.index == i }?.isText == false }
         val sideloaded = exo.currentTracks.groups.any { g -> g.type == C.TRACK_TYPE_TEXT && g.getTrackFormat(0).id?.endsWith("ext-$index") == true }
-        if (n.method == Method.Transcode && index >= 0 && !sideloaded || burned) {
+        if (casting.value || n.method == Method.Transcode && index >= 0 && !sideloaded || burned) {
             load(n.item, player.currentPosition, n.audio, index, n.quality)
         } else {
             now.value = n.copy(sub = index)
@@ -519,6 +521,12 @@ class Playback(private val app: App) {
             if (played) app.downloads.syncPending()
         }
     }
+
+    /** Name of the Chromecast being played to, if any. */
+    fun castDeviceName(): String? = runCatching { androidx.media3.cast.Cast.getSingletonInstance(app).currentCastSession?.castDevice?.friendlyName }.getOrNull()
+
+    /** Leaves the TV and carries on playing on this device from the same spot. */
+    fun playHere() = runCatching { androidx.media3.cast.Cast.getSingletonInstance(app).endCurrentSession(true) }
 
     /** Stops and clears the player, reporting the position. */
     fun stop() {

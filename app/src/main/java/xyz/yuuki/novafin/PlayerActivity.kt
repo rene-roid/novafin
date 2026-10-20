@@ -21,6 +21,8 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.mutableStateOf
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -46,7 +48,9 @@ class PlayerActivity : ComponentActivity() {
 
     private val listener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
-            if (isPlaying) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            // The phone may sleep while the TV plays.
+            if (isPlaying && !playback.casting.value) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             updatePip()
         }
 
@@ -77,10 +81,22 @@ class PlayerActivity : ComponentActivity() {
         playback.player.addListener(listener)
         ContextCompat.registerReceiver(this, pipActions, IntentFilter(PIP_ACTION), ContextCompat.RECEIVER_NOT_EXPORTED)
         updatePip()
+        // Casting turns the player into a remote: any orientation, system bars visible, screen may sleep.
+        lifecycleScope.launch {
+            playback.casting.collect { casting ->
+                requestedOrientation = if (casting) ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED else ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                WindowCompat.getInsetsController(window, window.decorView).run {
+                    if (casting) show(WindowInsetsCompat.Type.systemBars()) else hide(WindowInsetsCompat.Type.systemBars())
+                }
+                if (casting) window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                updatePip()
+            }
+        }
         setContent {
             NovafinTheme {
                 PlayerScreen(this, inPip.value, onClose = {
-                    playback.stop()
+                    // Leaving the remote keeps the TV playing; leaving local playback stops it.
+                    if (!playback.casting.value) playback.stop()
                     finish()
                 })
             }
@@ -159,12 +175,13 @@ class PlayerActivity : ComponentActivity() {
     override fun onStop() {
         super.onStop()
         when {
+            // Casting: the TV keeps playing whatever happens to this screen (back, home, screen off).
+            playback.casting.value -> Unit
             // Back out of the player, or the PiP window was closed.
             wasInPip || isFinishing -> {
                 playback.stop()
                 finish()
             }
-            playback.casting.value -> Unit
             App.it.prefs.backgroundAudio && playback.player.isPlaying ->
                 playback.exo.trackSelectionParameters = playback.exo.trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true).build()
             else -> playback.player.pause()

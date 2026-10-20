@@ -71,6 +71,7 @@ import androidx.navigation3.ui.NavDisplay
 import kotlinx.coroutines.delay
 import xyz.yuuki.novafin.ui.AddressesScreen
 import xyz.yuuki.novafin.ui.Bg
+import xyz.yuuki.novafin.ui.CastBar
 import xyz.yuuki.novafin.ui.Cosmos
 import xyz.yuuki.novafin.ui.DetailsScreen
 import xyz.yuuki.novafin.ui.DownloadsScreen
@@ -179,6 +180,7 @@ private fun Shell() {
                         },
                     )
                 }
+                CastBar()
                 if (!tablet) NavigationBar(containerColor = Bg.copy(alpha = .78f)) {
                     for (t in tabs) NavigationBarItem(
                         root == t.route, { nav.tab(t.route) }, { Icon(if (root == t.route) t.selectedIcon else t.icon, t.label) }, label = { Text(t.label) },
