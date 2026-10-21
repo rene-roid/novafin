@@ -62,6 +62,8 @@ fun Header(title: String, modifier: Modifier = Modifier, inGrid: Boolean = false
             contentAlignment = Alignment.Center,
         ) {
             Text(App.it.prefs.userName?.take(1)?.uppercase() ?: "?", style = MaterialTheme.typography.titleMedium)
+            // Users without a Jellyfin picture 404 here, leaving the initial visible.
+            AsyncImage(App.it.api.userImageUrl(108), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         }
     }
 }

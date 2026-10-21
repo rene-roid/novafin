@@ -339,6 +339,8 @@ class Api(private val prefs: Prefs, private val scope: CoroutineScope, private v
 
     fun personImageUrl(id: String, width: Int) = "$SERVER/Items/$id/Images/Primary?fillWidth=$width&quality=85&format=Webp"
 
+    fun userImageUrl(width: Int) = "$SERVER/Users/${prefs.userId}/Images/Primary?fillWidth=$width&quality=85&format=Webp"
+
     fun report(path: String, body: JSONObject) = scope.launch(Dispatchers.IO) { runCatching { post("/Sessions/Playing$path", body) } }
 
     suspend fun reportNow(path: String, body: JSONObject) = post("/Sessions/Playing$path", body)
