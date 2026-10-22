@@ -100,7 +100,7 @@ class Api(private val prefs: Prefs, private val scope: CoroutineScope, private v
     /** Callers looking for another address because the active one failed; the UI says so meanwhile. */
     val searching = MutableStateFlow(0)
 
-    private var race: Deferred<String?>? = null
+    @Volatile private var race: Deferred<String?>? = null
     @Volatile private var lastFailedRace = 0L
 
     // ---- address switching ----
@@ -108,8 +108,10 @@ class Api(private val prefs: Prefs, private val scope: CoroutineScope, private v
     private fun resolve(chain: Interceptor.Chain): Response {
         val req = chain.request()
         if (req.url.host != SERVER_HOST) return chain.proceed(req)
+        // A race is underway (startup, network change): take its pick instead of timing out on a stale address.
+        race?.takeIf { it.isActive }?.let { r -> runBlocking { r.await() } }
         if (System.currentTimeMillis() - lastFailedRace < 10_000) throw IOException("Server unreachable")
-        val base = active ?: throw IOException("No server address")
+        val base = active ?: runBlocking { pickBest() } ?: throw IOException("No server address")
         val res = try {
             chain.proceed(rewrite(req, base))
         } catch (e: IOException) {

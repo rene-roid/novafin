@@ -40,8 +40,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import xyz.yuuki.novafin.Address
 import xyz.yuuki.novafin.AddressKind
 import xyz.yuuki.novafin.Api
@@ -72,16 +72,20 @@ fun LoginScreen() {
         p.token = login.token
         p.userId = login.userId
         p.userName = login.userName
-        val list = mutableListOf(Address(url, addressKind(url).name))
-        // The server's own LAN address, when it is a different way in and really the same server.
-        info.localAddress?.let(::normalizeAddress)?.takeIf { it != url }?.let { local ->
-            val same = withContext(Dispatchers.IO) { runCatching { Api.publicInfo(local).id == info.id }.getOrDefault(false) }
-            if (same) list.add(0, Address(local, addressKind(local).name))
-        }
-        p.addresses = list
+        p.addresses = listOf(Address(url, addressKind(url).name))
         p.active = url
-        runCatching { app.api.loadUserConfig() }
+        // The server's own LAN address, when it is a different way in and really the same server.
+        // Checked in the background: away from home it would only hold up signing in until it times out.
+        info.localAddress?.let(::normalizeAddress)?.takeIf { it != url }?.let { local ->
+            app.scope.launch(Dispatchers.IO) {
+                if (runCatching { Api.publicInfo(local).id == info.id }.getOrDefault(false)) {
+                    p.addresses = listOf(Address(local, addressKind(local).name)) + p.addresses
+                    app.api.pickBest()
+                }
+            }
+        }
         app.api.reconnect()
+        runCatching { app.api.loadUserConfig() }
         app.loggedIn.value = true
     }
 
@@ -97,9 +101,10 @@ fun LoginScreen() {
                 addressKind(url) == AddressKind.Public -> listOf(https, url)
                 else -> listOf(url, https)
             }
-            val found = withContext(Dispatchers.IO) {
-                candidates.firstNotNullOfOrNull { c -> runCatching { c to Api.publicInfo(c) }.getOrNull() }
-            }
+            // All at once; the first in preference order that answers wins.
+            val found = candidates
+                .map { c -> async(Dispatchers.IO) { runCatching { c to Api.publicInfo(c) }.getOrNull() } }
+                .firstNotNullOfOrNull { it.await() }
             if (found == null) error = "No Jellyfin server answered at $url" else server = found
             busy = false
         }
