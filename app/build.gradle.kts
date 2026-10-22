@@ -25,6 +25,10 @@ android {
             }
         }
     }
+    lint {
+        // False positive: Cast asks for fragment 1.0.0, but it resolves to 1.5.4.
+        disable += "InvalidFragmentVersionForActivityResult"
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
