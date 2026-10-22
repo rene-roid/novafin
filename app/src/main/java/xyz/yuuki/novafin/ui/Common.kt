@@ -65,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.CancellationException
+import java.io.IOException
 import xyz.yuuki.novafin.App
 import xyz.yuuki.novafin.Img
 import xyz.yuuki.novafin.Item
@@ -141,19 +142,21 @@ fun <T> rememberLoad(key: String, loader: suspend () -> T): Load<T> {
     LaunchedEffect(key, tick, online) {
         loading = true
         try {
-            val v = loader()
+            val v = App.it.api.withFailover(loader)
             uiCache[key] = v
             data = v
             error = null
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            error = e.message ?: "Couldn't reach the server"
+            error = loadError(e)
         }
         loading = false
     }
     return Load(data, error, loading) { tick++ }
 }
+
+fun loadError(e: Exception) = if (e is IOException) "None of the server's addresses answered" else e.message ?: "Couldn't load"
 
 fun forgetUi(prefix: String) = uiCache.keys.filter { it.startsWith(prefix) }.forEach { uiCache.remove(it) }
 

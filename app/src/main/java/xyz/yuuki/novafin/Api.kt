@@ -97,6 +97,8 @@ class Api(private val prefs: Prefs, private val scope: CoroutineScope, private v
     /** Last round trip per address in ms, null when it didn't answer. */
     val latency = MutableStateFlow<Map<String, Long?>>(emptyMap())
     val online = MutableStateFlow(true)
+    /** Callers looking for another address because the active one failed; the UI says so meanwhile. */
+    val searching = MutableStateFlow(0)
 
     private var race: Deferred<String?>? = null
     @Volatile private var lastFailedRace = 0L
@@ -113,7 +115,7 @@ class Api(private val prefs: Prefs, private val scope: CoroutineScope, private v
         } catch (e: IOException) {
             if (chain.call().isCanceled()) throw e
             // Re-race and retry once on whichever address answers now.
-            val next = runBlocking { pickBest() }
+            val next = runBlocking { whileSearching { pickBest() } }
             if (next == null || next == base) throw e
             chain.proceed(rewrite(req, next))
         }
@@ -137,14 +139,38 @@ class Api(private val prefs: Prefs, private val scope: CoroutineScope, private v
     private var reconnecting: Job? = null
 
     /** Races the addresses, retrying for a few seconds: a network that just came up often can't route yet. */
-    fun reconnect() {
+    fun reconnect(): Job {
         reconnecting?.cancel()
-        reconnecting = scope.launch {
+        return scope.launch {
             for (wait in listOf(0L, 1_000, 2_000, 4_000, 8_000)) {
                 delay(wait)
                 if (pickBest() != null) return@launch
             }
+        }.also { reconnecting = it }
+    }
+
+    suspend fun <T> whileSearching(block: suspend () -> T): T {
+        searching.update { it + 1 }
+        try {
+            return block()
+        } finally {
+            searching.update { it - 1 }
         }
+    }
+
+    /** Runs [block]; if the address fails, keeps looking for one that answers (see [reconnect]) and tries once more there. */
+    suspend fun <T> withFailover(block: suspend () -> T): T = try {
+        block()
+    } catch (e: IOException) {
+        val found = whileSearching {
+            do {
+                val job = synchronized(this) { reconnecting?.takeIf { it.isActive } ?: reconnect() }
+                job.join()
+            } while (job.isCancelled) // A network change restarted it.
+            online.value
+        }
+        if (!found) throw e
+        block()
     }
 
     /** Pings every address and switches to the best one. Concurrent callers share one race. */

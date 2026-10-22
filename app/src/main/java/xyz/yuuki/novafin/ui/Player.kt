@@ -129,6 +129,7 @@ fun PlayerScreen(activity: PlayerActivity, inPip: Boolean, onClose: () -> Unit) 
     val loading by playback.loading.collectAsStateWithLifecycle()
     val error by playback.error.collectAsStateWithLifecycle()
     val casting by playback.casting.collectAsStateWithLifecycle()
+    val searching by App.it.api.searching.collectAsStateWithLifecycle()
 
     var position by remember { mutableLongStateOf(0L) }
     var duration by remember { mutableLongStateOf(0L) }
@@ -220,7 +221,7 @@ fun PlayerScreen(activity: PlayerActivity, inPip: Boolean, onClose: () -> Unit) 
 
             SegmentButton(n, position, Modifier.align(Alignment.BottomEnd).windowInsetsPadding(WindowInsets.safeDrawing).padding(end = 24.dp, bottom = if (controls) 110.dp else 32.dp))
             UpNext(n, position, duration, Modifier.align(Alignment.BottomEnd).windowInsetsPadding(WindowInsets.safeDrawing).padding(end = 24.dp, bottom = if (controls) 110.dp else 32.dp))
-            n.note?.let { Note(it, Modifier.align(Alignment.TopCenter).padding(top = 72.dp)) }
+            (if (searching > 0) "Lost the server · trying other addresses…" else n.note)?.let { Note(it, Modifier.align(Alignment.TopCenter).padding(top = 72.dp)) }
         }
 
         error?.let { e ->

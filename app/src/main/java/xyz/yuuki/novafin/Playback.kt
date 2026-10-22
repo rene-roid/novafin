@@ -447,8 +447,10 @@ class Playback(private val app: App) {
             }
             // A dropped connection: find the best address and carry on from the same spot.
             e.errorCode in 2000..2999 && n.method != Method.Offline && networkRetries++ < 4 -> scope.launch {
-                delay(1_000L * networkRetries)
-                api.pickBest()
+                api.whileSearching {
+                    delay(1_000L * networkRetries)
+                    api.pickBest()
+                }
                 if (n.method == Method.Transcode) load(n.item, pos, n.audio, n.sub, n.quality) else {
                     player.prepare()
                     player.play()

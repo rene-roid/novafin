@@ -85,7 +85,7 @@ fun LibraryScreen() {
             val have = items.value.size
             if ((total < 0 || have < total) && last >= have - 20) {
                 try {
-                    val page = api.items(parentId = v.id, types = typesFor(v), sort = sort, filters = filter, start = have)
+                    val page = api.withFailover { api.items(parentId = v.id, types = typesFor(v), sort = sort, filters = filter, start = have) }
                     if (items.value.size == have) {
                         items.value = items.value + page.items
                         total = page.total
@@ -93,7 +93,7 @@ fun LibraryScreen() {
                     error = null
                 } catch (e: Exception) {
                     if (e is kotlinx.coroutines.CancellationException) throw e
-                    error = e.message ?: "Couldn't load"
+                    error = loadError(e)
                 }
             }
         }

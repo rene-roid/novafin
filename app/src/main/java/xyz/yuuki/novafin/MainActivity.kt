@@ -124,6 +124,14 @@ private fun Shell() {
     val nav = remember { Nav() }
     val tablet = isTablet()
     val online by App.it.api.online.collectAsStateWithLifecycle()
+    val searching by App.it.api.searching.collectAsStateWithLifecycle()
+    val banner = when {
+        searching > 0 -> "Server not answering · trying other addresses…"
+        !online -> "Offline · showing downloads"
+        else -> null
+    }
+    // Keeps the text while the banner animates out.
+    val bannerText = remember { arrayOf("") }.also { if (banner != null) it[0] = banner }
     val root = nav.stack.first()
 
     // Opened without a connection: go straight to what can be watched.
@@ -151,14 +159,14 @@ private fun Shell() {
                 )
             }
             Column(Modifier.weight(1f)) {
-                AnimatedVisibility(!online) {
+                AnimatedVisibility(banner != null) {
                     Text(
-                        "Offline · showing downloads", Modifier.fillMaxWidth().background(Dusk.copy(alpha = .9f)).statusBarsPadding().padding(4.dp),
+                        bannerText[0], Modifier.fillMaxWidth().background(Dusk.copy(alpha = .9f)).statusBarsPadding().padding(4.dp),
                         color = Bg, style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center,
                     )
                 }
-                // The offline banner already covers the status bar.
-                Box(Modifier.weight(1f).then(if (online) Modifier else Modifier.consumeWindowInsets(WindowInsets.statusBars))) {
+                // The banner already covers the status bar.
+                Box(Modifier.weight(1f).then(if (banner == null) Modifier else Modifier.consumeWindowInsets(WindowInsets.statusBars))) {
                     NavDisplay(
                         backStack = nav.stack,
                         onBack = { nav.back() },
