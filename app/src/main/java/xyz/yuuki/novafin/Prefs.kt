@@ -48,6 +48,12 @@ enum class HomeSection(val label: String) {
     Libraries("Libraries"),
 }
 
+/** Saved order first, then rows the saved order doesn't know yet, minus the hidden ones. */
+fun homeLayout(order: List<String>?, hidden: Set<String>): List<HomeSection> {
+    val known = order.orEmpty().mapNotNull { n -> HomeSection.entries.firstOrNull { it.name == n } }
+    return (known + (HomeSection.entries - known.toSet())).filter { it.name !in hidden }
+}
+
 class Prefs(ctx: Context) {
     private val p = ctx.getSharedPreferences("novafin", Context.MODE_PRIVATE)
 
@@ -121,9 +127,11 @@ class Prefs(ctx: Context) {
     var imageCacheMb by int("imageCacheMb", 256)
 
     // ---- home ----
+    /** Enabled rows in order. Hidden ones are stored rather than shown ones, so rows added in an update appear. */
     var homeSections: List<HomeSection>
-        get() = p.getString("homeSections", null)?.split(',')?.mapNotNull { n -> HomeSection.entries.firstOrNull { it.name == n } } ?: HomeSection.entries
-        set(v) = p.edit().putString("homeSections", v.joinToString(",") { it.name }).apply()
+        get() = homeLayout(p.getString("homeOrder", null)?.split(','), p.getString("homeHidden", null)?.split(',')?.toSet().orEmpty())
+        set(v) = p.edit().putString("homeOrder", v.joinToString(",") { it.name })
+            .putString("homeHidden", (HomeSection.entries - v.toSet()).joinToString(",") { it.name }).apply()
 
     /** Newest first; one per line since a search can contain commas. */
     var recentSearches: List<String>
