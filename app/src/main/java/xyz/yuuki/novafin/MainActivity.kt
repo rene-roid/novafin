@@ -81,6 +81,10 @@ import xyz.yuuki.novafin.ui.CastBar
 import xyz.yuuki.novafin.ui.Cosmos
 import xyz.yuuki.novafin.ui.DetailsScreen
 import xyz.yuuki.novafin.ui.DevicesScreen
+import xyz.yuuki.novafin.ui.FavoritesScreen
+import xyz.yuuki.novafin.ui.PlaylistScreen
+import xyz.yuuki.novafin.ui.PlaylistsScreen
+import xyz.yuuki.novafin.ui.WatchTogetherScreen
 import xyz.yuuki.novafin.ui.DownloadsScreen
 import xyz.yuuki.novafin.ui.Dusk
 import xyz.yuuki.novafin.ui.HomeScreen
@@ -216,6 +220,11 @@ private fun Shell(openId: String?, opened: () -> Unit) {
                                     Route.Settings -> SettingsScreen()
                                     Route.Addresses -> AddressesScreen()
                                     Route.Devices -> DevicesScreen()
+                                    Route.Playlists -> PlaylistsScreen()
+                                    is Route.Playlist -> PlaylistScreen(r.id, r.name)
+                                    Route.Favorites -> FavoritesScreen()
+                                    Route.AddAccount -> LoginScreen(adding = true)
+                                    is Route.WatchTogether -> WatchTogetherScreen(r.itemId)
                                     is Route.Details -> DetailsScreen(r.id)
                                     is Route.Browse -> BrowseScreen(r)
                                     is Route.SettingsPage -> SettingsPageScreen(r.section)

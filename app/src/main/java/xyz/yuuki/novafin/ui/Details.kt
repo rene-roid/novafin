@@ -28,7 +28,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import android.content.Intent
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
+import androidx.compose.material.icons.rounded.Groups
+import androidx.compose.material.icons.rounded.Share
+import androidx.compose.ui.platform.LocalContext
+import xyz.yuuki.novafin.AddressKind
+import xyz.yuuki.novafin.addressKind
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Download
@@ -188,6 +195,9 @@ private fun Actions(item: Item, refresh: () -> Unit) {
     var played by remember(item) { mutableStateOf(item.userData.played) }
     var fav by remember(item) { mutableStateOf(item.userData.favorite) }
     var downloading by remember { mutableStateOf(false) }
+    var addToPlaylist by remember { mutableStateOf(false) }
+    val ctx = LocalContext.current
+    val nav = LocalNav.current
     val dl by app.downloads.states.collectAsStateWithLifecycle()
     val streams = item.streams
     val mem = app.prefs.memory(item.memoryKey)
@@ -230,6 +240,15 @@ private fun Actions(item: Item, refresh: () -> Unit) {
                 fav = !fav
                 scope.launch { runCatching { app.api.setFavorite(item.id, fav) }.onFailure { fav = !fav } }
             }) { Icon(if (fav) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder, "Favourite", tint = if (fav) Dusk else Color.White) }
+            if (item.playable) FilledTonalIconButton({ addToPlaylist = true }) { Icon(Icons.AutoMirrored.Rounded.PlaylistAdd, "Add to playlist") }
+            target?.let { t -> FilledTonalIconButton({ nav.go(Route.WatchTogether(t.id)) }) { Icon(Icons.Rounded.Groups, "Watch together") } }
+            FilledTonalIconButton({
+                val prefs = app.prefs
+                val address = prefs.addresses.firstOrNull { addressKind(it.url) == AddressKind.Public }?.url ?: app.api.active
+                val title = item.name + (item.year?.let { " ($it)" } ?: "")
+                val text = "$title\n$address/web/#/details?id=${item.id}&serverId=${prefs.serverId}\n(You need an account on this server to open it.)"
+                ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text), null))
+            }) { Icon(Icons.Rounded.Share, "Share") }
             if (item.playable || item.isSeries || item.isSeason) {
                 val state = dl[item.id]
                 FilledTonalIconButton({ if (state?.done == true) app.downloads.remove(item.id) else downloading = true }) {
@@ -256,6 +275,7 @@ private fun Actions(item: Item, refresh: () -> Unit) {
         }
     }
     if (downloading) DownloadDialog(item) { downloading = false }
+    if (addToPlaylist) AddToPlaylistDialog(item) { addToPlaylist = false }
 }
 
 @Composable
@@ -303,8 +323,20 @@ private fun LazyListScope.body(item: Item, seasons: Load<List<Item>>?, nav: Nav,
         ItemRow("More like this", similar.data.orEmpty())
     }
     if (item.type == "BoxSet") item {
-        val children = rememberLoad("children:${item.id}") { App.it.api.items(parentId = item.id, recursive = false).items }
-        ItemRow("In this collection", children.data.orEmpty())
+        var order by remember(item.id) { mutableStateOf("PremiereDate,Ascending") }
+        val children = rememberLoad("children:${item.id}:$order") { App.it.api.items(parentId = item.id, recursive = false, sort = order).items }
+        val tablet = isTablet()
+        Section("In this collection") {
+            LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(listOf("Release date" to "PremiereDate,Ascending", "Name" to "SortName,Ascending", "Recently added" to "DateCreated,Descending")) { (label, v) ->
+                    FilterChip(order == v, { order = v }, { Text(label) }, shape = RoundedCornerShape(20.dp))
+                }
+            }
+            Gap(8.dp)
+            LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                items(children.data.orEmpty(), key = { it.id }) { c -> PosterCard(c, if (tablet) 150.dp else 120.dp) { nav.open(c) } }
+            }
+        }
     }
 }
 

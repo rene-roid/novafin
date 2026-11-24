@@ -46,9 +46,10 @@ fun DownloadsScreen() {
     val states by dl.states.collectAsStateWithLifecycle()
     val play = rememberPlay()
     var paused by remember { mutableStateOf(false) }
-    val (episodes, movies) = items.values.partition { it.isEpisode }
+    val (mine, foreign) = items.values.partition(dl::mine)
+    val (episodes, movies) = mine.partition { it.isEpisode }
     val shows = episodes.groupBy { it.seriesName ?: "" }.toSortedMap()
-    val active = states.values.count { !it.done && it.state != Download.STATE_FAILED }
+    val active = mine.count { i -> states[i.id]?.let { !it.done && it.state != Download.STATE_FAILED } == true }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item { Header("Downloads") }
@@ -61,7 +62,7 @@ fun DownloadsScreen() {
                 }) { Text(if (paused) "Resume all" else "Pause all") }
             }
         }
-        if (items.isEmpty()) item { Empty("Downloaded movies and episodes show up here and play without a connection.") }
+        if (mine.isEmpty()) item { Empty("Downloaded movies and episodes show up here and play without a connection.") }
         if (movies.isNotEmpty()) item { Text("Movies", Modifier.padding(16.dp, 16.dp, 16.dp, 4.dp), style = MaterialTheme.typography.titleLarge) }
         items(movies.sortedBy { it.name }, key = { it.id }) { DownloadRow(it, states[it.id], { play(it, null, null, null) }) { dl.remove(it.id) } }
         for ((show, eps) in shows) {
@@ -69,6 +70,12 @@ fun DownloadsScreen() {
             items(eps.sortedWith(compareBy({ it.parentIndex ?: 0 }, { it.index ?: 0 })), key = { it.id }) {
                 DownloadRow(it, states[it.id], { play(it, null, null, null) }) { dl.remove(it.id) }
             }
+        }
+        if (foreign.isNotEmpty()) item {
+            Text(
+                if (foreign.size == 1) "1 download from another account" else "${foreign.size} downloads from other accounts",
+                Modifier.padding(16.dp), style = MaterialTheme.typography.bodySmall, color = Sub,
+            )
         }
     }
 }

@@ -16,10 +16,17 @@ import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.crossfade
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import xyz.yuuki.novafin.ui.forgetUi
+import java.util.concurrent.TimeUnit
 
 class App : Application(), SingletonImageLoader.Factory {
     companion object {
@@ -42,7 +49,8 @@ class App : Application(), SingletonImageLoader.Factory {
         super.onCreate()
         it = this
         prefs = Prefs(this)
-        api = Api(prefs, scope) { signOut() }
+        // A 401 that comes in right after a switch answers the previous account's request.
+        api = Api(prefs, scope) { if (System.currentTimeMillis() - switchedAt > 5_000) signOut() }
         loggedIn.value = prefs.loggedIn
         runCatching { Cast.getSingletonInstance(this).initialize() }
         if (prefs.loggedIn) {
@@ -99,10 +107,61 @@ class App : Application(), SingletonImageLoader.Factory {
         if (api.pickBest() != null) downloads.syncPending()
     }
 
-    fun signOut() {
+    @Volatile private var switchedAt = 0L
+
+    /**
+     * Makes [target] the account in use (see [switchAccount]) and drops what was attached to the
+     * previous one: playback, addresses and latency, the UI cache and the widget snapshots.
+     */
+    suspend fun useAccount(target: Account) = withContext(Dispatchers.Main) {
+        switchedAt = System.currentTimeMillis()
+        if (Playback.active) {
+            playback.stop()
+            // The stop report gets its address and token on another thread; let it leave for the old server.
+            delay(250)
+        }
+        val (current, others) = switchAccount(prefs.account, prefs.otherAccounts, target)
+        // No token goes out until the race has checked the new addresses against the new server id.
+        prefs.switching = true
+        val online = try {
+            prefs.setAccounts(current, others)
+            api.accountChanged()
+            api.pickBest() != null
+        } finally {
+            prefs.switching = false
+            switchedAt = System.currentTimeMillis()
+        }
+        forgetUi("")
+        HomeWidget.forget(this@App)
+        HomeWidget.refresh(this@App)
+        downloads.accountChanged()
+        if (online) {
+            runCatching { api.loadUserConfig() }
+            downloads.syncPending()
+        }
+        loggedIn.value = true
+    }
+
+    /** Best effort: asks [a]'s server to forget its token. Its own client and header, and only if that server answers there. */
+    fun revoke(a: Account) = scope.launch(Dispatchers.IO) {
+        runCatching {
+            val base = a.active ?: a.addresses.first().url
+            val http = OkHttpClient.Builder().callTimeout(5, TimeUnit.SECONDS).build()
+            if (Api.publicInfo(base, http).id != a.serverId) return@launch
+            http.newCall(
+                Request.Builder().url("$base/Sessions/Logout").header("Authorization", Api.authHeader(prefs.deviceId, a.token)).post(ByteArray(0).toRequestBody()).build(),
+            ).execute().close()
+        }
+    }
+
+    /** Forgets the account in use; a saved one takes over, else it's back to the login screen. */
+    fun signOut(): Job? {
+        val next = prefs.otherAccounts.firstOrNull()
         prefs.logout()
+        if (next != null) return scope.launch { useAccount(next) }
         loggedIn.value = false
         HomeWidget.refresh(this)
+        return null
     }
 
     /**

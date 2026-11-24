@@ -84,6 +84,13 @@ sealed interface Route {
     data object Settings : Route
     data object Addresses : Route
     data object Devices : Route
+    data object Playlists : Route
+    data class Playlist(val id: String, val name: String) : Route
+    data object Favorites : Route
+    /** Sign in to another server or user, keeping the current one. */
+    data object AddAccount : Route
+    /** Watch together (SyncPlay); [itemId] is what to start a new group with. */
+    data class WatchTogether(val itemId: String? = null) : Route
     data class Details(val id: String) : Route
     /** Titles across every library sharing a genre or a person. */
     data class Browse(val title: String, val genre: String? = null, val personId: String? = null) : Route

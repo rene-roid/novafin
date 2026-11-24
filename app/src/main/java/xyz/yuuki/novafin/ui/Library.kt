@@ -16,8 +16,11 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -167,6 +170,8 @@ fun LibraryScreen() {
                 Header("Library", inGrid = true)
                 if (views.error != null && all.isEmpty()) ErrorState(views.error, views.refresh)
                 LazyRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    item { AssistChip({ nav.go(Route.Favorites) }, { Text("Favourites") }, leadingIcon = { Icon(Icons.Rounded.Favorite, null, Modifier.size(18.dp)) }, shape = RoundedCornerShape(20.dp)) }
+                    item { AssistChip({ nav.go(Route.Playlists) }, { Text("Playlists") }, leadingIcon = { Icon(Icons.AutoMirrored.Rounded.PlaylistPlay, null, Modifier.size(18.dp)) }, shape = RoundedCornerShape(20.dp)) }
                     items(all, key = { it.id }) { v ->
                         FilterChip(v.id == view?.id, { LibraryState.selected = v.id }, { Text(v.name) }, shape = RoundedCornerShape(20.dp))
                     }

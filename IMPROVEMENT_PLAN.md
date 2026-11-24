@@ -231,10 +231,10 @@ Valor (V) y esfuerzo (E) de 1 a 3. Riesgo: B bajo, M medio, A alto.
 | 15 | Filtro por clasificación por edades | 2 | 1 | B | `/Items/Filters` | **Hecho** (fase 2); años exactos descartados, las décadas bastan |
 | 16 | "Because you watched X" en Inicio, sin repetir títulos ya visibles | 2 | 1 | B | `/Movies/Recommendations` | **Hecho** (fase 2) |
 | 17 | Buscador dentro de Ajustes | 1 | 1 | B | | Descartado: siete categorías con resumen ya se recorren de un vistazo, y un índice aparte duplicaría los títulos de cada opción |
-| 18 | Accesibilidad: estado de visionado en tarjetas y episodios, avatar etiquetado | 2 | 2 | B | | **Hecho en parte** (fase 2); pendiente contraste sobre la aurora y TalkBack en el reproductor |
-| 19 | Varios servidores guardados | 2 | 3 | M | | Fase 3 |
-| 20 | Listas de reproducción de vídeo | 2 | 3 | M | permisos de lista | Fase 3 |
-| 21 | Ver juntos con SyncPlay (nivel 1–2) | 2 | 3 | A | SyncPlay, WebSocket | Fase 3 |
+| 18 | Accesibilidad: estado de visionado en tarjetas y episodios, avatar etiquetado | 2 | 2 | B | | **Hecho en parte** (fase 2). Los controles del reproductor ya tenían descripciones (comprobado en el árbol de accesibilidad). Pendiente: medir el contraste del texto secundario sobre las zonas claras de la aurora |
+| 19 | Varias cuentas guardadas (servidores o usuarios) y aprobar códigos de Quick Connect | 2 | 3 | M | | **Hecho** (fase 3) |
+| 20 | Listas de reproducción de vídeo, "Mis favoritos", orden de colecciones y compartir | 2 | 3 | M | permisos de lista | **Hecho** (fase 3) |
+| 21 | Ver juntos con SyncPlay (nivel 1) y cola de reproducción | 2 | 3 | A | SyncPlay, WebSocket | **Hecho** (fase 3). El nivel 2 (proponer y votar) no existe en Jellyfin: la cola del grupo sí, los votos no |
 | 22 | Mando a distancia de otra sesión (pausa, reanudar, parar) | 1 | 2 | M | `/Sessions/{id}/Playing` | **Hecho** (fase 2), solo si la sesión admite control remoto |
 | 23 | Sala pública por enlace | 1 | 3 | A | relay externo | Descartado |
 | 24 | Recomendador propio | 1 | 3 | M | | Descartado |
@@ -302,4 +302,25 @@ Sin verificar:
 - Tarjeta "Playing on <dispositivo>" en Inicio, por el mismo motivo.
 - Botón de reproducir del widget (habría cambiado el progreso en el servidor real) y widgets en Android 9–11 y otros launchers.
 - TalkBack de extremo a extremo: solo se añadió el estado de visionado a tarjetas y episodios y la etiqueta del avatar.
+
+### Fase 3 (rama `improve/phase3`)
+
+Comprobado en el emulador contra el servidor real (Jellyfin 10.11.11), con un segundo cliente simulado por `tools/syncplay_peer.py`:
+- `./gradlew testDebugUnitTest`: 50 pruebas, 0 fallos (`AccountsTest` y `SyncPlayTest` nuevas).
+- **Ver juntos.** Crear un grupo desde la ficha abre el reproductor. Al unirse otro cliente el grupo pasa a Waiting y la app se pausa sola hasta que todos están listos. Desde el otro cliente, pausa (la app queda en 232,799 s, la posición exacta del comando del servidor), salto a 600,000 s y reanudar (600 → 603 → 606 s). La pausa desde la app pausa el grupo. "Leave" desde la hoja del reproductor vacía el grupo. Una lección de la prueba: el segundo cliente necesita su propio token, porque Jellyfin identifica la sesión por el dispositivo del token.
+- **Quick Connect.** "Approve a Quick Connect code" en Ajustes aprobó el código de otro dispositivo, que obtuvo su token. Iniciar sesión con Quick Connect desde "Add account" funciona y vuelve a Inicio; con el mismo servidor y usuario no se duplica la cuenta, solo se renueva el token.
+- **Login.** Mensajes reales: "Addresses can't contain spaces.", "Couldn't find nonexistent.invalid.", "Nothing answered at 192.168.68.63:1…", "10.0.2.2 answered, but it isn't a Jellyfin server." (con un servidor HTTP local que responde 404) y el paso de usuario con "Jellyfin 10.11.11 · dirección".
+- **Listas.** Crear "Novafin test" desde una ficha, añadir otra película "al principio" (queda primera), subir un elemento y quitar otro: el orden del servidor coincide en cada paso. "Play all" pone la cola (aparece "Next" en una película). Se borró la lista después.
+- **Favoritos** vacío coincide con el servidor (0); con Akira marcada aparece. **Compartir** abre la hoja con título, enlace y aviso de que hace falta cuenta.
+- **Your devices y tarjeta de Inicio** con una sesión real ("Living room TV" reproduciendo Shrek): fila con progreso y "Continue here", sin botones remotos porque esa sesión no admite control remoto; en Inicio, "Playing on Living room TV". "Continue here" abre Shrek a partir de esa posición.
+- **Siguiente episodio** (pendiente de la fase 1): con Breaking Bad S1:E7, la tarjeta muestra "Next episode in N · S2:E1"; al agotarse la cuenta empieza S2:E1; con "Cancel", S2:E1 termina y S2:E2 no empieza. Tras una película aparece "Watch next · The Wild Robot", y la tarjeta en apaisado ocupaba todo el ancho por el orden de los modificadores (corregido).
+
+Sin verificar:
+- Cambiar entre dos cuentas distintas (no hay un segundo servidor ni otro usuario con el que probar); la lógica está cubierta por `AccountsTest`.
+- Descargas separadas por servidor (no hay descargas en el emulador).
+- Orden de colecciones (el servidor no tiene colecciones).
+- Sugerencia de una serie similar al terminar el último episodio de una serie: implementada después de perder la sesión del emulador.
+- Reproducir en grupo con dos personas distintas y transcodificación lenta; corrección de deriva entre comandos (no implementada, como en jellyfin-web solo se sincroniza en cada comando).
+
+Restos en el servidor por las pruebas: Akira, Shrek, The Angry Birds Movie y Breaking Bad S1:E7, S2:E1 y S2:E2 tienen más reproducciones y una fecha de última reproducción de hoy. Akira y Shrek siguen sin ver y con la posición a 0; los otros ya estaban vistos. Los tokens de prueba se revocaron.
 

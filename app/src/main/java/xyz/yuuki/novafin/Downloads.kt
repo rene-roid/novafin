@@ -103,6 +103,19 @@ class Downloads(private val app: App) {
         states.value = map
     }
 
+    private fun ours(server: String?, user: String? = null) = (server == null || server == app.prefs.serverId) && (user == null || user == app.prefs.userId)
+
+    /** Downloaded from the server in use. Items saved without a server id predate accounts and count as ours. */
+    fun mine(item: Item) = ours(item.json.s("ServerId"))
+
+    /** Unfinished downloads of other servers wait until their account is in use again: their URLs only mean something there. */
+    fun accountChanged() {
+        for ((id, s) in states.value) if (!s.done) {
+            val ours = items.value[id]?.let(::mine) != false
+            DownloadService.sendSetStopReason(app, DownloadSvc::class.java, id, if (ours) Download.STOP_REASON_NONE else 1, false)
+        }
+    }
+
     fun isDownloaded(id: String) = states.value[id]?.done == true
 
     fun setWifiOnly(on: Boolean) {
@@ -178,6 +191,7 @@ class Downloads(private val app: App) {
         if (states.value[listed.id]?.let { it.state != Download.STATE_FAILED } == true) return@withContext
         val api = app.api
         val item = api.item(listed.id)
+        item.json.put("ServerId", app.prefs.serverId)
         val segments = runCatching { api.segments(item.id) }.getOrDefault(emptyList())
         item.json.put("Segments", org.json.JSONArray(segments.map { it.toJson() }))
         // Show and season pages, so they can be browsed offline.
@@ -264,7 +278,7 @@ class Downloads(private val app: App) {
     /** Remembers progress that couldn't be reported; the newest entry per item wins. */
     fun queueProgress(id: String, positionMs: Long, played: Boolean) = synchronized(pendingLock) {
         val o = runCatching { JSONObject(pendingFile.readText()) }.getOrDefault(JSONObject())
-        o.put(id, JSONObject().put("positionMs", positionMs).put("played", played).put("at", Instant.now().toString()))
+        o.put(id, JSONObject().put("positionMs", positionMs).put("played", played).put("at", Instant.now().toString()).put("server", app.prefs.serverId).put("user", app.prefs.userId))
         pendingFile.writeText(o.toString())
     }
 
@@ -277,6 +291,8 @@ class Downloads(private val app: App) {
             val pending = synchronized(pendingLock) { runCatching { JSONObject(pendingFile.readText()) }.getOrNull() }
             if (pending != null) for (id in pending.keys().asSequence().toList()) {
                 val e = pending.getJSONObject(id)
+                // Another account's progress waits for its turn: sent here, the server wouldn't know the item and we'd drop it as gone.
+                if (!ours(e.s("server") ?: offlineItem(id)?.json?.s("ServerId"), e.s("user"))) continue
                 val at = Instant.parse(e.getString("at"))
                 try {
                     val server = app.api.userData(id)
