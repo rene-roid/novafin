@@ -57,6 +57,7 @@ import androidx.compose.material.icons.rounded.AspectRatio
 import androidx.compose.material.icons.rounded.Brightness6
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Forward10
+import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.LockOpen
 import androidx.compose.material.icons.rounded.Pause
@@ -69,6 +70,7 @@ import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.Subtitles
 import androidx.compose.material.icons.rounded.VolumeUp
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -113,10 +115,12 @@ import androidx.media3.ui.compose.ContentFrame
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.delay
 import xyz.yuuki.novafin.App
+import xyz.yuuki.novafin.GroupState
 import xyz.yuuki.novafin.Method
 import xyz.yuuki.novafin.NowPlaying
 import xyz.yuuki.novafin.PlayerActivity
 import xyz.yuuki.novafin.Quality
+import xyz.yuuki.novafin.SyncState
 import xyz.yuuki.novafin.trickplay
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -131,6 +135,8 @@ fun PlayerScreen(activity: PlayerActivity, inPip: Boolean, onClose: () -> Unit) 
     val error by playback.error.collectAsStateWithLifecycle()
     val casting by playback.casting.collectAsStateWithLifecycle()
     val searching by App.it.api.searching.collectAsStateWithLifecycle()
+    val syncState by playback.syncPlay.state.collectAsStateWithLifecycle()
+    val group = syncState as? SyncState.InGroup
 
     var position by remember { mutableLongStateOf(0L) }
     var duration by remember { mutableLongStateOf(0L) }
@@ -208,7 +214,7 @@ fun PlayerScreen(activity: PlayerActivity, inPip: Boolean, onClose: () -> Unit) 
         if (!inPip && n != null) {
             AnimatedVisibility(controls && !locked, Modifier.fillMaxSize(), enter = fadeIn(), exit = fadeOut()) {
                 Controls(
-                    activity, n, position, duration, buffered, playing, seekPreview,
+                    activity, n, group, position, duration, buffered, playing, seekPreview,
                     onSeek = { seekPreview = it; interacted++ },
                     onSeekDone = { seekPreview?.let(player::seekTo); seekPreview = null },
                     onClose = onClose, onSheet = { sheet = it }, onLock = { locked = true }, onInteract = { interacted++ },
@@ -223,6 +229,12 @@ fun PlayerScreen(activity: PlayerActivity, inPip: Boolean, onClose: () -> Unit) 
             SegmentButton(n, position, Modifier.align(Alignment.BottomEnd).windowInsetsPadding(WindowInsets.safeDrawing).padding(end = 24.dp, bottom = if (controls) 110.dp else 32.dp))
             UpNext(n, position, duration, Modifier.align(Alignment.BottomEnd).windowInsetsPadding(WindowInsets.safeDrawing).padding(end = 24.dp, bottom = if (controls) 110.dp else 32.dp))
             (if (searching > 0) "Lost the server · trying other addresses…" else n.note)?.let { Note(it, Modifier.align(Alignment.TopCenter).padding(top = 72.dp)) }
+            if (group?.state == GroupState.Waiting) Pill("Waiting for others…", Modifier.align(Alignment.TopCenter).padding(top = 116.dp))
+        }
+        // Opened for a group that hasn't sent what it's watching yet.
+        if (!inPip && n == null && group != null && error == null) Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("Waiting for the group…", style = MaterialTheme.typography.bodyLarge)
+            TextButton(onClose) { Text("Close") }
         }
 
         error?.let { e ->
@@ -230,7 +242,7 @@ fun PlayerScreen(activity: PlayerActivity, inPip: Boolean, onClose: () -> Unit) 
                 Text(e, style = MaterialTheme.typography.bodyLarge)
                 Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClose) { Text("Close") }
-                    AuroraButton({ n?.let { playback.play(it.item, position) } }) { Text("Retry") }
+                    AuroraButton({ playback.retry(position) }) { Text("Retry") }
                 }
             }
         }
@@ -239,7 +251,31 @@ fun PlayerScreen(activity: PlayerActivity, inPip: Boolean, onClose: () -> Unit) 
     when (sheet) {
         "tracks" -> now?.let { TracksSheet(it) { sheet = null } }
         "settings" -> now?.let { SettingsSheet(it) { sheet = null } }
+        "group" -> group?.let { g -> GroupSheet(g, onLeave = { playback.syncPlay.leave(); sheet = null }) { sheet = null } }
     }
+}
+
+fun watchingWith(g: SyncState.InGroup) = (g.participants.size - 1).let { if (it > 0) "Watching with $it" else "Watching together · just you" }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun GroupSheet(g: SyncState.InGroup, onLeave: () -> Unit, onDismiss: () -> Unit) {
+    ModalBottomSheet(onDismiss, containerColor = Raised) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 24.dp)) {
+            Text(g.name, style = MaterialTheme.typography.titleMedium, color = Violet)
+            Text(groupStateLabel(g.state), Modifier.padding(bottom = 8.dp), style = MaterialTheme.typography.bodySmall, color = Sub)
+            for (p in g.participants) Text(p, Modifier.padding(vertical = 6.dp), style = MaterialTheme.typography.bodyLarge)
+            Text("Play, pause and seek apply to everyone.", Modifier.padding(vertical = 8.dp), style = MaterialTheme.typography.bodySmall, color = Faint)
+            OutlinedButton(onLeave) { Text("Leave") }
+        }
+    }
+}
+
+fun groupStateLabel(s: GroupState) = when (s) {
+    GroupState.Idle -> "Nothing playing"
+    GroupState.Waiting -> "Waiting for others…"
+    GroupState.Paused -> "Paused"
+    GroupState.Playing -> "Playing"
 }
 
 @Composable
@@ -516,6 +552,7 @@ private fun Gestures(
 private fun Controls(
     activity: PlayerActivity,
     n: NowPlaying,
+    group: SyncState.InGroup?,
     position: Long,
     duration: Long,
     buffered: Long,
@@ -540,7 +577,9 @@ private fun Controls(
                 Text(n.item.seriesName ?: n.item.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (n.item.isEpisode) Text("${n.item.episodeLabel} · ${n.item.name}", style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            MediaRouteButton(Modifier.size(48.dp))
+            // A TV can't follow the group's commands, so casting is off while watching together.
+            if (group != null) AssistChip({ onSheet("group") }, { Text(watchingWith(group)) }, leadingIcon = { Icon(Icons.Rounded.Groups, null, Modifier.size(18.dp)) })
+            else MediaRouteButton(Modifier.size(48.dp))
             IconButton({ onSheet("tracks") }) { Icon(Icons.Rounded.Subtitles, "Audio and subtitles") }
             IconButton({ onSheet("settings") }) { Icon(Icons.Rounded.Settings, "Quality and speed") }
         }
@@ -571,7 +610,7 @@ private fun Controls(
                 }
                 IconButton(onFill) { Icon(Icons.Rounded.AspectRatio, if (fill) "Fit to screen" else "Fill screen", tint = if (fill) Glow else Color.White) }
                 IconButton({ activity.enterPip() }) { Icon(Icons.Rounded.PictureInPictureAlt, "Picture in picture") }
-                if (n.next != null) IconButton({ playback.playNext() }) { Icon(Icons.Rounded.SkipNext, "Next episode") }
+                if (n.next != null) IconButton({ playback.playNext() }) { Icon(Icons.Rounded.SkipNext, if (n.next.isEpisode) "Next episode" else "Next") }
             }
         }
     }
@@ -693,20 +732,28 @@ private fun UpNext(n: NowPlaying, position: Long, duration: Long, modifier: Modi
         playback.playNext()
     }
     Row(
-        modifier.fillMaxWidth(.9f).widthIn(max = 380.dp).clip(RoundedCornerShape(12.dp)).background(Bg.copy(alpha = .92f)).padding(10.dp),
+        modifier.widthIn(max = 380.dp).fillMaxWidth(.9f).clip(RoundedCornerShape(12.dp)).background(Bg.copy(alpha = .92f)).padding(10.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically,
     ) {
         Picture(next.thumb ?: next.poster, 112.dp, Modifier.width(112.dp).aspectRatio(16f / 9).clip(RoundedCornerShape(8.dp)))
         Column(Modifier.weight(1f)) {
+            val label = if (next.isEpisode) "Next episode" else "Up next"
             Text(
                 when {
                     n.next == null -> "Watch next"
-                    autoplay -> "Next episode in $left"
-                    else -> "Next episode"
+                    autoplay -> "$label in $left"
+                    else -> label
                 },
                 style = MaterialTheme.typography.labelMedium, color = Glow,
             )
-            Text(if (next.isEpisode) "${next.episodeLabel} · ${next.name}" else next.name, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(
+                when {
+                    !next.isEpisode -> next.name
+                    n.next == null -> "${next.seriesName} · ${next.episodeLabel}"
+                    else -> "${next.episodeLabel} · ${next.name}"
+                },
+                style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis,
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 TextButton({ playback.playNext() }, contentPadding = PaddingValues(horizontal = 8.dp)) { Text(if (autoplay) "Play now" else "Play") }
                 if (autoplay) TextButton({ cancelled = true; playback.cancelAutoplay() }, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Cancel") }
@@ -720,10 +767,12 @@ private fun UpNext(n: NowPlaying, position: Long, duration: Long, modifier: Modi
 private fun Note(text: String, modifier: Modifier) {
     var visible by remember(text) { mutableStateOf(true) }
     LaunchedEffect(text) { delay(4_000); visible = false }
-    AnimatedVisibility(visible, modifier, enter = fadeIn(), exit = fadeOut()) {
-        Text(text, Modifier.background(Bg.copy(alpha = .85f), RoundedCornerShape(20.dp)).padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.labelLarge)
-    }
+    AnimatedVisibility(visible, modifier, enter = fadeIn(), exit = fadeOut()) { Pill(text) }
 }
+
+@Composable
+private fun Pill(text: String, modifier: Modifier = Modifier) =
+    Text(text, modifier.background(Bg.copy(alpha = .85f), RoundedCornerShape(20.dp)).padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.labelLarge)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -756,9 +805,12 @@ private fun SettingsSheet(n: NowPlaying, onDismiss: () -> Unit) {
     ModalBottomSheet(onDismiss, containerColor = Raised) {
         LazyColumn(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
             item {
-                Text("Speed", Modifier.padding(vertical = 8.dp), style = MaterialTheme.typography.titleMedium, color = Violet)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    for (s in listOf(.5f, .75f, 1f, 1.25f, 1.5f, 2f)) FilterChip(speed == s, { speed = s; playback.player.setPlaybackSpeed(s) }, { Text("${s}×") })
+                // A group plays at one speed.
+                if (!playback.syncPlay.following) {
+                    Text("Speed", Modifier.padding(vertical = 8.dp), style = MaterialTheme.typography.titleMedium, color = Violet)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        for (s in listOf(.5f, .75f, 1f, 1.25f, 1.5f, 2f)) FilterChip(speed == s, { speed = s; playback.player.setPlaybackSpeed(s) }, { Text("${s}×") })
+                    }
                 }
                 Text("Quality", Modifier.padding(top = 16.dp, bottom = 4.dp), style = MaterialTheme.typography.titleMedium, color = Violet)
                 Text(

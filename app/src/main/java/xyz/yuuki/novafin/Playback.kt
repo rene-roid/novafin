@@ -11,6 +11,7 @@ import androidx.media3.cast.RemoteCastPlayer
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.DeviceInfo
+import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MimeTypes
@@ -36,6 +37,14 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
 import java.util.Locale
+
+/** Titles played in order; [index] is the one loaded. */
+data class Queue(val items: List<Item>, val index: Int) {
+    val next get() = items.getOrNull(index + 1)
+
+    /** The queue moved on to [item] (the next entry when it repeats), or null when it isn't in it. */
+    fun at(item: Item) = (if (next?.id == item.id) index + 1 else items.indexOfFirst { it.id == item.id }).takeIf { it >= 0 }?.let { copy(index = it) }
+}
 
 enum class Method(val label: String) { DirectPlay("Direct play"), Remux("Remux"), Transcode("Transcode"), Offline("Downloaded") }
 
@@ -100,15 +109,45 @@ class Playback(private val app: App) {
         .build()
 
     /** Plays locally and moves to a Chromecast when one is picked. Falls back to [exo] without Play services. */
-    val player: Player = runCatching {
+    internal val raw: Player = runCatching {
         CastPlayer.Builder(app).setLocalPlayer(exo)
             .setRemotePlayer(RemoteCastPlayer.Builder(app).setMediaItemConverter(CastConverter()).build()).build()
     }.getOrDefault(exo)
+
+    /**
+     * What the UI, the notification and headset buttons control. While watching together, play, pause
+     * and seek become requests to the group, which answers with a command for every device ([raw] obeys it).
+     */
+    val player: Player = object : ForwardingPlayer(raw) {
+        override fun play() {
+            if (syncPlay.following) syncPlay.unpause() else super.play()
+        }
+
+        override fun pause() {
+            if (syncPlay.following) syncPlay.pause() else super.pause()
+        }
+
+        override fun setPlayWhenReady(playWhenReady: Boolean) = if (playWhenReady) play() else pause()
+
+        override fun seekTo(positionMs: Long) {
+            if (syncPlay.following) syncPlay.seek(positionMs) else super.seekTo(positionMs)
+        }
+
+        override fun seekTo(mediaItemIndex: Int, positionMs: Long) = if (syncPlay.following) seekTo(positionMs) else super.seekTo(mediaItemIndex, positionMs)
+
+        override fun seekBack() = if (syncPlay.following) seekTo((currentPosition - seekBackIncrement).coerceAtLeast(0)) else super.seekBack()
+
+        override fun seekForward() = if (syncPlay.following) seekTo(currentPosition + seekForwardIncrement) else super.seekForward()
+    }
 
     val now = MutableStateFlow<NowPlaying?>(null)
     val casting = MutableStateFlow(false)
     val error = MutableStateFlow<String?>(null)
     val loading = MutableStateFlow(false)
+    val syncPlay = SyncPlay(app, this)
+
+    /** Titles played in order (a playlist); null when a single title or a show's episodes are playing. */
+    private var queue: Queue? = null
 
     private var loadJob: Job? = null
     private var triedTranscode = false
@@ -122,7 +161,7 @@ class Playback(private val app: App) {
     private var autoplayCancelledFor: String? = null
 
     init {
-        player.addListener(object : Player.Listener {
+        raw.addListener(object : Player.Listener {
             override fun onTracksChanged(tracks: Tracks) = applyTracks()
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -145,11 +184,11 @@ class Playback(private val app: App) {
                         wasReady = true
                         networkRetries = 0
                     }
-                    Player.STATE_BUFFERING -> if (wasReady && player.playWhenReady && System.currentTimeMillis() - lastSeekAt > 2_000) rebuffered()
+                    Player.STATE_BUFFERING -> if (wasReady && raw.playWhenReady && System.currentTimeMillis() - lastSeekAt > 2_000) rebuffered()
                     Player.STATE_ENDED -> {
                         stopped(ended = true)
                         val n = now.value?.next
-                        if (n != null && prefs.autoplayNext && autoplayCancelledFor != now.value?.item?.id) play(n) else active = false
+                        if (n != null && prefs.autoplayNext && autoplayCancelledFor != now.value?.item?.id) advance(n) else active = false
                     }
                 }
             }
@@ -164,7 +203,7 @@ class Playback(private val app: App) {
                 if (remote || n == null) return
                 // Back from the TV: carry on here only when asked to. Casting stopped any other way
                 // (from the cast menu, the TV, a dropped network) closes the media instead of playing from the phone.
-                if (playingHere) load(n.item, player.currentPosition, n.audio, n.sub, n.quality) else stop()
+                if (playingHere) load(n.item, raw.currentPosition, n.audio, n.sub, n.quality) else stop()
                 playingHere = false
             }
         })
@@ -175,14 +214,15 @@ class Playback(private val app: App) {
             while (isActive) {
                 delay(500)
                 val n = now.value ?: continue
-                if (prefs.autoSkipIntro && !casting.value) {
-                    val pos = player.currentPosition
+                // In a group a seek moves everyone; skipping stays a button there.
+                if (prefs.autoSkipIntro && !casting.value && !syncPlay.following) {
+                    val pos = raw.currentPosition
                     n.segments.firstOrNull { it.type in setOf("Intro", "Recap") && pos in it.startMs until it.endMs - 1_000 && it !in skipped }?.let {
                         skipped += it
-                        player.seekTo(it.endMs)
+                        raw.seekTo(it.endMs)
                     }
                 }
-                if (++tick % 20 == 0 && player.isPlaying) report("/Progress")
+                if (++tick % 20 == 0 && raw.isPlaying) report("/Progress")
             }
         }
     }
@@ -191,17 +231,37 @@ class Playback(private val app: App) {
 
     /** Plays [item] from [startMs] (null: resume where it was left), with the given tracks or the remembered ones. */
     fun play(item: Item, startMs: Long? = null, audio: Int? = null, sub: Int? = null) {
+        if (syncPlay.inGroup) return syncPlay.setQueue(listOf(item.id), 0, startMs ?: item.userData.positionMs.takeIf { !item.userData.played } ?: 0)
+        queue = queue?.at(item)
+        start(item, startMs, audio, sub)
+    }
+
+    /** Loads [item] on this device, whatever the group or the queue say. */
+    internal fun start(item: Item, startMs: Long? = null, audio: Int? = null, sub: Int? = null) {
         if (now.value?.item?.id != item.id) stopped()
         triedTranscode = false
         skipped.clear()
         // Speed is per item.
-        player.setPlaybackSpeed(1f)
+        raw.setPlaybackSpeed(1f)
         load(item, startMs, audio, sub, null)
     }
 
     /** Plays [items] in order from [index]; the next one follows like the next episode does. */
     fun playQueue(items: List<Item>, index: Int = 0) {
-        play(items[index])
+        if (syncPlay.inGroup) return syncPlay.setQueue(items.map { it.id }, index, 0)
+        queue = Queue(items, index)
+        start(items[index])
+    }
+
+    /** On to [next]: in a group the server moves everyone to its queue's next entry. */
+    private fun advance(next: Item) {
+        if (syncPlay.following && next.id == syncPlay.nextItemId) syncPlay.nextItem() else play(next, 0)
+    }
+
+    /** Loads what's playing again at [positionMs] after an error; in a group only this device reloads. */
+    fun retry(positionMs: Long) {
+        val n = now.value ?: return
+        if (syncPlay.following) load(n.item, positionMs, n.audio, n.sub, n.quality) else play(n.item, positionMs)
     }
 
     private fun load(listed: Item, startMs: Long?, audio: Int?, sub: Int?, quality: Quality?, forceTranscode: Boolean = false, note: String? = null, stream: Boolean = false) {
@@ -297,17 +357,33 @@ class Playback(private val app: App) {
         wasReady = false
         started = false
         rebuffers.clear()
-        player.setMediaItem(media, start)
-        player.prepare()
-        player.play()
+        raw.setMediaItem(media, start)
+        raw.prepare()
+        // A group starts everyone together once they've all loaded.
+        if (!syncPlay.following) raw.play()
 
         // Segments and the next episode don't hold up the start.
         val segments = item.json.optJSONArray("Segments")?.objects()?.map(Segment::from)
             ?: runCatching { api.segments(item.id) }.getOrDefault(emptyList())
-        val next = nextEpisode(item)
+        val q = queue
+        val next = when {
+            syncPlay.following -> syncPlay.nextItemId?.let { runCatching { api.item(it) }.getOrNull() }
+            q != null -> q.next
+            else -> nextEpisode(item)
+        }
         now.value = now.value?.takeIf { it.item.id == item.id }?.copy(segments = segments, next = next)
         if (next == null && prefs.suggestRelated && np.method != Method.Offline) {
-            val related = runCatching { api.similar(item.seriesId ?: item.id, 8).firstOrNull { it.playable && !it.userData.played } }.getOrNull()
+            val related = runCatching {
+                api.similar(item.seriesId ?: item.id, 8).firstNotNullOfOrNull { s ->
+                    when {
+                        s.userData.played -> null
+                        s.playable -> s
+                        // A similar show starts at its first unwatched regular episode.
+                        s.isSeries -> api.episodes(s.id).sortedBy { it.parentIndex == 0 }.firstOrNull { !it.userData.played }
+                        else -> null
+                    }
+                }
+            }.getOrNull()
             now.value = now.value?.takeIf { it.item.id == item.id }?.copy(related = related)
         }
     }
@@ -406,11 +482,11 @@ class Playback(private val app: App) {
         val n = now.value ?: return
         prefs.remember(n.item.memoryKey, memoryFor(n.streams, index, n.sub))
         // The TV gets a new stream with the chosen track; locally the file's tracks switch in place.
-        if (casting.value) load(n.item, player.currentPosition, index, n.sub, n.quality)
+        if (casting.value) load(n.item, raw.currentPosition, index, n.sub, n.quality)
         else if (n.method == Method.DirectPlay || (n.method == Method.Offline && n.item.json.optJSONObject("Download")?.optBoolean("original") == true)) {
             now.value = n.copy(audio = index)
             applyTracks()
-        } else if (n.method != Method.Offline) load(n.item, player.currentPosition, index, n.sub, n.quality)
+        } else if (n.method != Method.Offline) load(n.item, raw.currentPosition, index, n.sub, n.quality)
         report("/Progress")
     }
 
@@ -421,7 +497,7 @@ class Playback(private val app: App) {
         val burned = n.method == Method.Transcode && listOf(index, n.sub).any { i -> n.streams.firstOrNull { it.index == i }?.isText == false }
         val sideloaded = exo.currentTracks.groups.any { g -> g.type == C.TRACK_TYPE_TEXT && g.getTrackFormat(0).id?.endsWith("ext-$index") == true }
         if (casting.value || n.method == Method.Transcode && index >= 0 && !sideloaded || burned) {
-            load(n.item, player.currentPosition, n.audio, index, n.quality)
+            load(n.item, raw.currentPosition, n.audio, index, n.quality)
         } else {
             now.value = n.copy(sub = index)
             selectSub(index)
@@ -432,7 +508,7 @@ class Playback(private val app: App) {
     fun setQuality(q: Quality) {
         val n = now.value ?: return
         if (n.method == Method.Offline) return
-        load(n.item, player.currentPosition, n.audio, n.sub, q)
+        load(n.item, raw.currentPosition, n.audio, n.sub, q)
     }
 
     fun cancelAutoplay() {
@@ -443,7 +519,7 @@ class Playback(private val app: App) {
     fun playNext() {
         val next = now.value?.let { it.next ?: it.related } ?: return
         stopped(ended = true)
-        play(next, 0)
+        advance(next)
     }
 
     fun skip(segment: Segment) {
@@ -455,7 +531,7 @@ class Playback(private val app: App) {
 
     private fun recover(e: PlaybackException) {
         val n = now.value ?: return
-        val pos = player.currentPosition
+        val pos = raw.currentPosition
         when {
             // Some AV1 / Hi10P files are too much for the phone: let the server convert them.
             e.errorCode in DECODER_ERRORS && n.method == Method.DirectPlay && !triedTranscode -> {
@@ -469,8 +545,8 @@ class Playback(private val app: App) {
                     api.pickBest()
                 }
                 if (n.method == Method.Transcode) load(n.item, pos, n.audio, n.sub, n.quality) else {
-                    player.prepare()
-                    player.play()
+                    raw.prepare()
+                    if (!syncPlay.following) raw.play()
                 }
             }
             // A broken download: stream it instead while the server is reachable.
@@ -495,7 +571,7 @@ class Playback(private val app: App) {
         if (rebuffers.size >= 2 && n.quality == Quality.Auto && n.method != Method.Offline && n.effective != Quality.DataSaver) {
             rebuffers.clear()
             val lower = if (n.method == Method.DirectPlay) Quality.High.takeIf { it.total < (n.streams.firstOrNull { it.isVideo }?.bitrate ?: 0) } ?: Quality.Medium else n.effective.lower
-            load(n.item, player.currentPosition, n.audio, n.sub, lower, note = "Lowered quality to ${lower.label}")
+            load(n.item, raw.currentPosition, n.audio, n.sub, lower, note = "Lowered quality to ${lower.label}")
         }
     }
 
@@ -503,14 +579,14 @@ class Playback(private val app: App) {
 
     private fun body(n: NowPlaying, pos: Long) = JSONObject()
         .put("ItemId", n.item.id).put("MediaSourceId", n.sourceId).put("PlaySessionId", n.playSessionId)
-        .put("PositionTicks", pos * TICKS_PER_MS).put("IsPaused", !player.isPlaying).put("CanSeek", true)
+        .put("PositionTicks", pos * TICKS_PER_MS).put("IsPaused", !raw.isPlaying).put("CanSeek", true)
         .put("PlayMethod", when (n.method) { Method.Transcode -> "Transcode"; Method.Remux -> "DirectStream"; else -> "DirectPlay" })
         .put("AudioStreamIndex", n.audio).put("SubtitleStreamIndex", n.sub)
 
     private fun report(path: String) {
         val n = now.value ?: return
-        val pos = player.currentPosition
-        val duration = player.duration.takeIf { it > 0 } ?: n.item.runTimeMs
+        val pos = raw.currentPosition
+        val duration = raw.duration.takeIf { it > 0 } ?: n.item.runTimeMs
         if (n.method == Method.Offline) app.downloads.updateUserData(n.item.id, n.item.userData.copy(positionMs = pos, lastPlayed = java.time.Instant.now()))
         val b = body(n, pos)
         app.scope.launch(Dispatchers.IO) {
@@ -527,8 +603,8 @@ class Playback(private val app: App) {
         val n = now.value ?: return
         if (!started && !ended) return
         started = false
-        val duration = player.duration.takeIf { it > 0 } ?: n.item.runTimeMs
-        val pos = if (ended) duration else player.currentPosition
+        val duration = raw.duration.takeIf { it > 0 } ?: n.item.runTimeMs
+        val pos = if (ended) duration else raw.currentPosition
         val played = ended || (duration > 0 && pos > duration * 0.9)
         val u = n.item.userData.copy(positionMs = if (played) 0 else pos, played = played || n.item.userData.played, lastPlayed = java.time.Instant.now())
         if (app.downloads.offlineItem(n.item.id) != null) app.downloads.updateUserData(n.item.id, u)
@@ -558,10 +634,11 @@ class Playback(private val app: App) {
 
     /** Stops and clears the player, reporting the position. */
     fun stop() {
+        syncPlay.halt()
         stopped()
         loadJob?.cancel()
-        player.stop()
-        player.clearMediaItems()
+        raw.stop()
+        raw.clearMediaItems()
         now.value = null
         active = false
     }
