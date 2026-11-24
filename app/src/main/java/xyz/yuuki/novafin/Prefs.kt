@@ -133,6 +133,9 @@ class Prefs(ctx: Context) {
         set(v) = p.edit().putString("homeOrder", v.joinToString(",") { it.name })
             .putString("homeHidden", (HomeSection.entries - v.toSet()).joinToString(",") { it.name }).apply()
 
+    /** Where "Add to playlist" puts new items: false = the end (Jellyfin's default), true = the start. */
+    var playlistAddToTop by bool("playlistAddToTop", false)
+
     /** Newest first; one per line since a search can contain commas. */
     var recentSearches: List<String>
         get() = p.getString("recentSearches", null)?.split('\n')?.filter { it.isNotBlank() } ?: emptyList()
