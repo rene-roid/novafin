@@ -71,7 +71,7 @@ import xyz.yuuki.novafin.NotJellyfinException
 import xyz.yuuki.novafin.normalizeAddress
 
 @Composable
-fun LoginScreen() {
+fun LoginScreen(adding: Boolean = false) {
     val app = App.it
     val scope = rememberCoroutineScope()
     var address by rememberSaveable { mutableStateOf("") }

@@ -308,6 +308,46 @@ class Api(private val prefs: Prefs, private val scope: CoroutineScope, private v
         return org.json.JSONArray(body).objects().map(Session::from).filter { it.deviceId != prefs.deviceId }
     }
 
+    // ---- raw access for features that own their endpoints (SyncPlay) ----
+
+    suspend fun getJson(path: String, vararg q: Pair<String, Any?>): String = send(Request.Builder().url(url(path, *q)).build())
+
+    suspend fun postJson(path: String, body: JSONObject? = null, vararg q: Pair<String, Any?>): String = post(path, body, *q)
+
+    // ---- playlists ----
+
+    /** Video playlists the user can see. */
+    suspend fun playlists() = Item.list(get("/Items", "userId" to prefs.userId, "includeItemTypes" to "Playlist", "recursive" to true, "sortBy" to "SortName", "fields" to listFields, "enableImageTypes" to imageTypes))
+        .filter { it.json.s("MediaType") != "Audio" }
+
+    /** In playlist order; each item carries its `PlaylistItemId` (the entry id used to move or remove it). */
+    suspend fun playlistItems(id: String) = Item.list(get("/Playlists/$id/Items", "userId" to prefs.userId, "fields" to listFields, "enableImageTypes" to imageTypes))
+
+    suspend fun createPlaylist(name: String, ids: List<String>): String =
+        JSONObject(post("/Playlists", JSONObject().put("Name", name).put("UserId", prefs.userId).put("MediaType", "Video").put("Ids", org.json.JSONArray(ids)))).getString("Id")
+
+    suspend fun addToPlaylist(id: String, ids: List<String>) { post("/Playlists/$id/Items", null, "ids" to ids.joinToString(","), "userId" to prefs.userId) }
+
+    suspend fun removeFromPlaylist(id: String, entryIds: List<String>) { send(Request.Builder().url(url("/Playlists/$id/Items", "entryIds" to entryIds.joinToString(","))).delete().build()) }
+
+    /** Needs ownership or edit rights; the server answers 403 otherwise. */
+    suspend fun movePlaylistItem(id: String, entryId: String, index: Int) { post("/Playlists/$id/Items/$entryId/Move/$index") }
+
+    // ---- quick connect from this device ----
+
+    /** Approves a code shown on another device, signing it in as this user. */
+    suspend fun quickConnectAuthorize(code: String) { post("/QuickConnect/Authorize", null, "code" to code, "userId" to prefs.userId) }
+
+    /** After switching accounts: forget the previous server's addresses and race the new ones. */
+    fun accountChanged() {
+        active = prefs.active ?: prefs.addresses.firstOrNull()?.url
+        activeFlow.value = active
+        latency.value = emptyMap()
+        lastFailedRace = 0
+        scope.launch(Dispatchers.IO) { http.connectionPool.evictAll() }
+        reconnect()
+    }
+
     /** Pause, Unpause or Stop on another session; only works where it reports SupportsRemoteControl. */
     suspend fun sessionCommand(sessionId: String, command: String) { post("/Sessions/$sessionId/Playing/$command") }
 

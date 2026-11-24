@@ -199,6 +199,11 @@ class Playback(private val app: App) {
         load(item, startMs, audio, sub, null)
     }
 
+    /** Plays [items] in order from [index]; the next one follows like the next episode does. */
+    fun playQueue(items: List<Item>, index: Int = 0) {
+        play(items[index])
+    }
+
     private fun load(listed: Item, startMs: Long?, audio: Int?, sub: Int?, quality: Quality?, forceTranscode: Boolean = false, note: String? = null, stream: Boolean = false) {
         loadJob?.cancel()
         loading.value = true
