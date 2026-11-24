@@ -109,6 +109,7 @@ fun HomeScreen() {
                         HomeSection.Latest -> for ((view, items) in d.latest) item(key = "latest-${view.id}") { ItemRow("Latest in ${view.name}", items) }
                         HomeSection.TopUnwatched -> item(key = "top") { ItemRow("Top rated, not watched yet", d.top) }
                         HomeSection.Libraries -> item(key = "libraries") { Libraries(d.views) }
+                        HomeSection.Recommended -> {}
                     }
                 }
                 load.error != null -> item {

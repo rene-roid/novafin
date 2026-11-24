@@ -75,6 +75,7 @@ import xyz.yuuki.novafin.ui.BrowseScreen
 import xyz.yuuki.novafin.ui.CastBar
 import xyz.yuuki.novafin.ui.Cosmos
 import xyz.yuuki.novafin.ui.DetailsScreen
+import xyz.yuuki.novafin.ui.DevicesScreen
 import xyz.yuuki.novafin.ui.DownloadsScreen
 import xyz.yuuki.novafin.ui.Dusk
 import xyz.yuuki.novafin.ui.HomeScreen
@@ -184,6 +185,7 @@ private fun Shell() {
                                     Route.Downloads -> DownloadsScreen()
                                     Route.Settings -> SettingsScreen()
                                     Route.Addresses -> AddressesScreen()
+                                    Route.Devices -> DevicesScreen()
                                     is Route.Details -> DetailsScreen(r.id)
                                     is Route.Browse -> BrowseScreen(r)
                                     is Route.SettingsPage -> SettingsPageScreen(r.section)

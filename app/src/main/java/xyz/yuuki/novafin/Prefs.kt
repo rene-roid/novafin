@@ -44,6 +44,7 @@ enum class HomeSection(val label: String) {
     NextUp("Next up"),
     Latest("Recently added"),
     TopUnwatched("Top rated, not watched yet"),
+    Recommended("Because you watched"),
     Libraries("Libraries"),
 }
 
@@ -69,6 +70,7 @@ class Prefs(ctx: Context) {
     var serverAudioLang by str("serverAudioLang")
     var serverSubLang by str("serverSubLang")
     var serverSubMode by str("serverSubMode")
+    var isAdmin by bool("isAdmin", false)
 
     val loggedIn get() = token != null && addresses.isNotEmpty()
 

@@ -187,4 +187,54 @@ fun Item.trickplay(): Trickplay? {
     return Trickplay(best.optInt("Width"), best.optInt("Height"), best.optInt("TileWidth"), best.optInt("TileHeight"), best.optInt("ThumbnailCount"), best.optInt("Interval"))
 }
 
+/** Another client signed in as this user (or any user, for admins), from `GET /Sessions`. */
+data class Session(
+    val id: String,
+    val deviceId: String,
+    val deviceName: String,
+    val client: String,
+    val userName: String?,
+    val lastActivity: Instant?,
+    val nowPlaying: Item?,
+    val positionMs: Long,
+    val paused: Boolean,
+    val remoteControl: Boolean,
+) {
+    companion object {
+        fun from(o: JSONObject) = Session(
+            o.optString("Id"), o.optString("DeviceId"), o.optString("DeviceName"), o.optString("Client"), o.s("UserName"),
+            o.s("LastActivityDate")?.let { runCatching { Instant.parse(it) }.getOrNull() },
+            o.optJSONObject("NowPlayingItem")?.let(::Item),
+            (o.optJSONObject("PlayState")?.optLong("PositionTicks") ?: 0) / TICKS_PER_MS,
+            o.optJSONObject("PlayState")?.optBoolean("IsPaused") == true, o.optBoolean("SupportsRemoteControl"),
+        )
+    }
+}
+
+/** One row of `/Movies/Recommendations`: why it's recommended, about what, and the movies. */
+data class Recommendation(val type: String, val baseline: String, val items: List<Item>) {
+    val title: String
+        get() = when (type) {
+            "SimilarToRecentlyPlayed" -> "Because you watched $baseline"
+            "SimilarToLikedItem" -> "Because you liked $baseline"
+            "HasDirectorFromRecentlyPlayed", "HasLikedDirector" -> "Directed by $baseline"
+            "HasActorFromRecentlyPlayed", "HasLikedActor" -> "Starring $baseline"
+            else -> "Recommended"
+        }
+
+    companion object {
+        fun from(o: JSONObject) = Recommendation(o.optString("RecommendationType"), o.optString("BaselineItemName"), Item.list(o))
+    }
+}
+
+/** What a library can be filtered by, from `/Items/Filters`. */
+data class QueryFilters(val genres: List<String>, val ratings: List<String>, val years: List<Int>) {
+    companion object {
+        fun from(o: JSONObject): QueryFilters {
+            fun strings(k: String) = o.optJSONArray(k)?.let { a -> List(a.length()) { a.getString(it) } }.orEmpty()
+            return QueryFilters(strings("Genres"), strings("OfficialRatings"), o.optJSONArray("Years")?.let { a -> List(a.length()) { a.getInt(it) } }.orEmpty().sortedDescending())
+        }
+    }
+}
+
 class ApiException(val code: Int, message: String) : Exception(message)

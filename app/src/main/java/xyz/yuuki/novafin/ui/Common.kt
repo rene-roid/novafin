@@ -80,6 +80,7 @@ sealed interface Route {
     data object Downloads : Route
     data object Settings : Route
     data object Addresses : Route
+    data object Devices : Route
     data class Details(val id: String) : Route
     /** Titles across every library sharing a genre or a person. */
     data class Browse(val title: String, val genre: String? = null, val personId: String? = null) : Route
