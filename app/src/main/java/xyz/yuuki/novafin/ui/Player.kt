@@ -44,6 +44,7 @@ import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
@@ -671,33 +672,46 @@ private fun SegmentButton(n: NowPlaying, position: Long, modifier: Modifier) {
     }
 }
 
-/** Next episode card at the outro or in the last 30 s, with a countdown when autoplay is on. */
+/** Next episode (or a suggestion when there is none) at the outro or in the last 30 s, with a countdown when autoplay is on. */
 @Composable
 private fun UpNext(n: NowPlaying, position: Long, duration: Long, modifier: Modifier) {
-    val next = n.next ?: return
+    val next = n.next ?: n.related ?: return
     val outro = n.segments.firstOrNull { it.type == "Outro" }
     val show = duration > 0 && (outro != null && position >= outro.startMs || duration - position < 30_000)
     var dismissed by remember(n.item.id) { mutableStateOf(false) }
+    var cancelled by remember(n.item.id) { mutableStateOf(false) }
     if (!show || dismissed) return
-    val autoplay = App.it.prefs.autoplayNext
+    val playback = App.it.playback
+    val autoplay = App.it.prefs.autoplayNext && n.next != null && !cancelled
     var left by remember(n.item.id) { mutableIntStateOf(10) }
     LaunchedEffect(n.item.id, autoplay) {
         if (!autoplay) return@LaunchedEffect
         while (left > 0) {
             delay(1_000)
-            if (App.it.playback.player.isPlaying) left--
+            if (playback.player.isPlaying) left--
         }
-        App.it.playback.playNext()
+        playback.playNext()
     }
     Row(
-        modifier.width(380.dp).clip(RoundedCornerShape(12.dp)).background(Bg.copy(alpha = .92f)).clickable { App.it.playback.playNext() }.padding(10.dp),
+        modifier.fillMaxWidth(.9f).widthIn(max = 380.dp).clip(RoundedCornerShape(12.dp)).background(Bg.copy(alpha = .92f)).padding(10.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically,
     ) {
-        Picture(next.thumb, 140.dp, Modifier.width(140.dp).aspectRatio(16f / 9).clip(RoundedCornerShape(8.dp)))
+        Picture(next.thumb ?: next.poster, 112.dp, Modifier.width(112.dp).aspectRatio(16f / 9).clip(RoundedCornerShape(8.dp)))
         Column(Modifier.weight(1f)) {
-            Text(if (autoplay) "Next episode in $left" else "Next episode", style = MaterialTheme.typography.labelMedium, color = Glow)
-            Text("${next.episodeLabel} · ${next.name}", style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            TextButton({ dismissed = true }, contentPadding = PaddingValues(0.dp)) { Text("Hide") }
+            Text(
+                when {
+                    n.next == null -> "Watch next"
+                    autoplay -> "Next episode in $left"
+                    else -> "Next episode"
+                },
+                style = MaterialTheme.typography.labelMedium, color = Glow,
+            )
+            Text(if (next.isEpisode) "${next.episodeLabel} · ${next.name}" else next.name, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton({ playback.playNext() }, contentPadding = PaddingValues(horizontal = 8.dp)) { Text(if (autoplay) "Play now" else "Play") }
+                if (autoplay) TextButton({ cancelled = true; playback.cancelAutoplay() }, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Cancel") }
+                else TextButton({ dismissed = true; playback.cancelAutoplay() }, contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Hide") }
+            }
         }
     }
 }

@@ -53,6 +53,8 @@ data class NowPlaying(
     val streams: List<Stream>,
     val segments: List<Segment> = emptyList(),
     val next: Item? = null,
+    /** A similar title offered when there is no next episode; never autoplayed. */
+    val related: Item? = null,
     val note: String? = null,
     val transcodeInfo: String? = null,
 )
@@ -116,6 +118,8 @@ class Playback(private val app: App) {
     private var wasReady = false
     private var started = false
     private val skipped = mutableSetOf<Segment>()
+    /** Item whose up-next autoplay was cancelled; it only matches while that item is loaded. */
+    private var autoplayCancelledFor: String? = null
 
     init {
         player.addListener(object : Player.Listener {
@@ -145,7 +149,7 @@ class Playback(private val app: App) {
                     Player.STATE_ENDED -> {
                         stopped(ended = true)
                         val n = now.value?.next
-                        if (n != null && prefs.autoplayNext) play(n) else active = false
+                        if (n != null && prefs.autoplayNext && autoplayCancelledFor != now.value?.item?.id) play(n) else active = false
                     }
                 }
             }
@@ -297,6 +301,10 @@ class Playback(private val app: App) {
             ?: runCatching { api.segments(item.id) }.getOrDefault(emptyList())
         val next = nextEpisode(item)
         now.value = now.value?.takeIf { it.item.id == item.id }?.copy(segments = segments, next = next)
+        if (next == null && prefs.suggestRelated && np.method != Method.Offline) {
+            val related = runCatching { api.similar(item.seriesId ?: item.id, 8).firstOrNull { it.playable && !it.userData.played } }.getOrNull()
+            now.value = now.value?.takeIf { it.item.id == item.id }?.copy(related = related)
+        }
     }
 
     private suspend fun nextEpisode(item: Item): Item? {
@@ -422,9 +430,13 @@ class Playback(private val app: App) {
         load(n.item, player.currentPosition, n.audio, n.sub, q)
     }
 
-    /** Moving on to the next episode counts the current one as watched, even from the credits. */
+    fun cancelAutoplay() {
+        autoplayCancelledFor = now.value?.item?.id
+    }
+
+    /** Moving on to the next episode (or the suggestion) counts the current one as watched, even from the credits. */
     fun playNext() {
-        val next = now.value?.next ?: return
+        val next = now.value?.let { it.next ?: it.related } ?: return
         stopped(ended = true)
         play(next, 0)
     }
