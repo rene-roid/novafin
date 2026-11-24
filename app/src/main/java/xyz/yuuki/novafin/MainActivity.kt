@@ -1,6 +1,7 @@
 package xyz.yuuki.novafin
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color as AndroidColor
 import android.os.Build
@@ -59,6 +60,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -75,6 +80,7 @@ import xyz.yuuki.novafin.ui.BrowseScreen
 import xyz.yuuki.novafin.ui.CastBar
 import xyz.yuuki.novafin.ui.Cosmos
 import xyz.yuuki.novafin.ui.DetailsScreen
+import xyz.yuuki.novafin.ui.DevicesScreen
 import xyz.yuuki.novafin.ui.DownloadsScreen
 import xyz.yuuki.novafin.ui.Dusk
 import xyz.yuuki.novafin.ui.HomeScreen
@@ -94,8 +100,32 @@ import xyz.yuuki.novafin.ui.Sub
 import xyz.yuuki.novafin.ui.isTablet
 
 class MainActivity : ComponentActivity() {
+    /** Item a widget asked to open; Shell consumes it. */
+    private var openId by mutableStateOf<String?>(null)
+
+    private fun widgetIntent(i: Intent) {
+        val id = i.getStringExtra(HomeWidget.EXTRA_ID)
+        if (id == null || !App.it.prefs.loggedIn) return
+        when (i.action) {
+            HomeWidget.ACTION_OPEN -> openId = id
+            HomeWidget.ACTION_PLAY -> lifecycleScope.launch {
+                runCatching { App.it.api.item(id) }.onSuccess {
+                    App.it.playback.play(it, null, null, null)
+                    startActivity(Intent(this@MainActivity, PlayerActivity::class.java))
+                }
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        widgetIntent(intent)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Not on recreation: the same intent would start the video again.
+        if (savedInstanceState == null) widgetIntent(intent)
         enableEdgeToEdge(SystemBarStyle.dark(AndroidColor.TRANSPARENT), SystemBarStyle.dark(AndroidColor.TRANSPARENT))
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             registerForActivityResult(ActivityResultContracts.RequestPermission()) {}.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -105,7 +135,7 @@ class MainActivity : ComponentActivity() {
                 val loggedIn by App.it.loggedIn.collectAsStateWithLifecycle()
                 Box(Modifier.fillMaxSize()) {
                     Cosmos(Modifier.fillMaxSize())
-                    if (loggedIn) Shell() else LoginScreen()
+                    if (loggedIn) Shell(openId) { openId = null } else LoginScreen()
                 }
             }
         }
@@ -122,8 +152,9 @@ private val tabs = listOf(
 )
 
 @Composable
-private fun Shell() {
+private fun Shell(openId: String?, opened: () -> Unit) {
     val nav = remember { Nav() }
+    LaunchedEffect(openId) { openId?.let { nav.go(Route.Details(it)); opened() } }
     val tablet = isTablet()
     val online by App.it.api.online.collectAsStateWithLifecycle()
     val searching by App.it.api.searching.collectAsStateWithLifecycle()
@@ -184,6 +215,7 @@ private fun Shell() {
                                     Route.Downloads -> DownloadsScreen()
                                     Route.Settings -> SettingsScreen()
                                     Route.Addresses -> AddressesScreen()
+                                    Route.Devices -> DevicesScreen()
                                     is Route.Details -> DetailsScreen(r.id)
                                     is Route.Browse -> BrowseScreen(r)
                                     is Route.SettingsPage -> SettingsPageScreen(r.section)

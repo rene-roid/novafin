@@ -65,6 +65,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -349,7 +351,7 @@ private fun Seasons(item: Item, seasons: Load<List<Item>>) {
 @Composable
 private fun EpisodeRow(ep: Item, current: Boolean, onOpen: () -> Unit, onPlay: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().background(if (current) Raised else Color.Transparent).clickable(onClick = onOpen).padding(horizontal = 16.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().background(if (current) Raised else Color.Transparent).clickable(onClick = onOpen).semantics { watchState(ep)?.let { stateDescription = it } }.padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(Modifier.width(150.dp).aspectRatio(16f / 9).clip(RoundedCornerShape(8.dp)).clickable(onClick = onPlay)) {

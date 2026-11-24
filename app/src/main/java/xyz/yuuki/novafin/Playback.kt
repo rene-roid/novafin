@@ -536,6 +536,7 @@ class Playback(private val app: App) {
                 app.downloads.queueProgress(n.item.id, if (played) 0 else pos, played)
             }
             if (played) app.downloads.syncPending()
+            HomeWidget.refresh(app)
         }
     }
 

@@ -17,6 +17,7 @@ data class LibraryFilter(
     val genres: Set<String> = emptySet(),
     val decades: Set<Int> = emptySet(),
     val resolution: Resolution? = null,
+    val ratings: Set<String> = emptySet(),
 ) {
     val isEmpty get() = this == LibraryFilter()
 
@@ -27,6 +28,7 @@ data class LibraryFilter(
                 if (genres.isNotEmpty()) add("genres" to genres.joinToString("|"))
                 if (decades.isNotEmpty()) add("years" to decades.sorted().flatMap(::decadeYears).joinToString(","))
                 resolution?.let { add(it.param) }
+                if (ratings.isNotEmpty()) add("officialRatings" to ratings.joinToString("|"))
             },
         )
 
@@ -37,6 +39,7 @@ data class LibraryFilter(
             genres.sorted().forEach { add(FilterChipInfo(it, copy(genres = genres - it))) }
             decades.sorted().forEach { add(FilterChipInfo("${it}s", copy(decades = decades - it))) }
             resolution?.let { add(FilterChipInfo(it.label, copy(resolution = null))) }
+            ratings.sorted().forEach { add(FilterChipInfo(it, copy(ratings = ratings - it))) }
         }
 }
 

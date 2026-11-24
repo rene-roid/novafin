@@ -6,7 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class FilterTest {
-    private val everything = LibraryFilter(Watched.Unwatched, true, setOf("Drama", "Comedy"), setOf(1990), Resolution.UHD)
+    private val everything = LibraryFilter(Watched.Unwatched, true, setOf("Drama", "Comedy"), setOf(1990), Resolution.UHD, setOf("TV-MA", "PG-13"))
 
     @Test fun empty() {
         val q = LibraryFilter().query
@@ -19,7 +19,7 @@ class FilterTest {
         val q = everything.query
         assertEquals("IsUnplayed,IsFavorite", q.filters)
         assertEquals(
-            listOf("genres" to "Drama|Comedy", "years" to "1990,1991,1992,1993,1994,1995,1996,1997,1998,1999", "is4K" to true),
+            listOf("genres" to "Drama|Comedy", "years" to "1990,1991,1992,1993,1994,1995,1996,1997,1998,1999", "is4K" to true, "officialRatings" to "TV-MA|PG-13"),
             q.extra,
         )
     }
@@ -31,11 +31,18 @@ class FilterTest {
 
     @Test fun removingOneChip() {
         val chips = everything.chips
-        assertEquals(listOf("Unwatched", "Favourites", "Comedy", "Drama", "1990s", "4K"), chips.map { it.label })
+        assertEquals(listOf("Unwatched", "Favourites", "Comedy", "Drama", "1990s", "4K", "PG-13", "TV-MA"), chips.map { it.label })
         val q = chips.first { it.label == "Drama" }.without.query
         assertEquals("IsUnplayed,IsFavorite", q.filters)
         assertEquals("Comedy", q.extra.first().second)
         assertEquals(LibraryFilter(), LibraryFilter(favourites = true).chips.single().without)
+    }
+
+    @Test fun removingARating() {
+        val q = everything.chips.first { it.label == "TV-MA" }.without.query
+        assertEquals(listOf("genres" to "Drama|Comedy", "years" to "1990,1991,1992,1993,1994,1995,1996,1997,1998,1999", "is4K" to true, "officialRatings" to "PG-13"), q.extra)
+        assertEquals(LibraryFilter(), LibraryFilter(ratings = setOf("R")).chips.single().without)
+        assertEquals(listOf("officialRatings" to "G"), LibraryFilter(ratings = setOf("G")).query.extra)
     }
 
     @Test fun sdMeansNotHd() {

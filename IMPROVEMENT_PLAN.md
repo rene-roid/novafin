@@ -225,17 +225,17 @@ Valor (V) y esfuerzo (E) de 1 a 3. Riesgo: B bajo, M medio, A alto.
 | 9 | Sugerencia de película al terminar (sin autoplay) | 2 | 1 | B | `/Similar` | **Hecho**, sin probar en reproducción real |
 | 10 | Login: descubrimiento LAN, errores por causa, validación | 3 | 2 | B | UDP 7359 en el servidor | **Hecho**; descubrimiento sin servidor que responda |
 | 11 | "Play" de una serie nueva empezaba por un especial (S0) | 2 | 1 | B | | **Hecho** |
-| 12 | Orden "Contenido nuevo" (`DateLastContentAdded`) | 2 | 1 | B | | Siguiente |
-| 13 | Widgets compacto y ampliado con instantánea local | 3 | 2 | M | | Fase 2 |
-| 14 | "Tus dispositivos" y "Seguir aquí" | 2 | 2 | B | `/Sessions` | Fase 2 |
-| 15 | Clasificación por edades y años exactos en filtros | 2 | 1 | B | `/Items/Filters` | Fase 2 |
-| 16 | "Porque viste X" en inicio | 2 | 1 | B | `/Movies/Recommendations` | Fase 2 |
-| 17 | Buscador dentro de Ajustes | 1 | 1 | B | | Fase 2 |
-| 18 | Accesibilidad: descripciones en tarjetas, contraste sobre la aurora, TalkBack en el reproductor | 2 | 2 | B | | Fase 2 |
+| 12 | Orden "New episodes" (`DateLastContentAdded`) en series | 2 | 1 | B | | **Hecho** (fase 2) |
+| 13 | Widgets "Continue watching" y "Next up", compacto y ampliado | 3 | 2 | M | | **Hecho** (fase 2) |
+| 14 | "Your devices", "Continue here" y tarjeta en Inicio | 2 | 2 | B | `/Sessions` | **Hecho** (fase 2) |
+| 15 | Filtro por clasificación por edades | 2 | 1 | B | `/Items/Filters` | **Hecho** (fase 2); años exactos descartados, las décadas bastan |
+| 16 | "Because you watched X" en Inicio, sin repetir títulos ya visibles | 2 | 1 | B | `/Movies/Recommendations` | **Hecho** (fase 2) |
+| 17 | Buscador dentro de Ajustes | 1 | 1 | B | | Descartado: siete categorías con resumen ya se recorren de un vistazo, y un índice aparte duplicaría los títulos de cada opción |
+| 18 | Accesibilidad: estado de visionado en tarjetas y episodios, avatar etiquetado | 2 | 2 | B | | **Hecho en parte** (fase 2); pendiente contraste sobre la aurora y TalkBack en el reproductor |
 | 19 | Varios servidores guardados | 2 | 3 | M | | Fase 3 |
 | 20 | Listas de reproducción de vídeo | 2 | 3 | M | permisos de lista | Fase 3 |
 | 21 | Ver juntos con SyncPlay (nivel 1–2) | 2 | 3 | A | SyncPlay, WebSocket | Fase 3 |
-| 22 | Mando a distancia de otra sesión | 1 | 2 | M | `/Sessions/{id}/Playing` | Fase 3 |
+| 22 | Mando a distancia de otra sesión (pausa, reanudar, parar) | 1 | 2 | M | `/Sessions/{id}/Playing` | **Hecho** (fase 2), solo si la sesión admite control remoto |
 | 23 | Sala pública por enlace | 1 | 3 | A | relay externo | Descartado |
 | 24 | Recomendador propio | 1 | 3 | M | | Descartado |
 | 25 | Tamaño de póster / densidad configurables | 1 | 1 | B | | Descartado (la cuadrícula ya es adaptativa) |
@@ -286,3 +286,20 @@ Sin verificar:
 - Pantalla de login en el emulador (cerrar sesión habría requerido credenciales que no tengo).
 - Tarjeta de fin de episodio/película en reproducción real: llegar a los últimos segundos marca el elemento como visto en el servidor real.
 - Pantalla dividida y móvil apaisado (solo se comprobó por anchos: compacto y expandido).
+
+### Fase 2 (rama `improve/phase2`)
+
+Comprobado:
+- `./gradlew testDebugUnitTest`: 31 pruebas, 0 fallos (`ModelsTest` y `WidgetLayoutTest` nuevas; `FilterTest` ampliada).
+- Inicio: "Because you watched The Angry Birds Movie" con Akira y The Angry Birds Movie 2. La primera versión repetía las mismas películas en dos filas e incluía la película base y otras ya vistas; ahora cada título sale una vez, sin ver y nunca la película base.
+- Una sección nueva (la de recomendaciones) aparece aunque el usuario ya hubiera personalizado Inicio: se guardan las filas ocultas y el orden, no la lista de visibles.
+- Biblioteca de series: orden "New episodes" disponible y aplicado; filtro de clasificación con TV-14, TV-MA y TV-PG del servidor (TV-MA → 1 título).
+- "Your devices" como administrador: "No other sessions are active." El estado de administrador ahora se refresca al abrir la app, no solo al iniciar sesión.
+- Widgets: el selector mostraba "Can't load widget" porque la vista previa usaba `<View>`, que `RemoteViews` no permite. Corregido y protegido por `WidgetLayoutTest`, que falla con cualquier etiqueta fuera de la lista permitida (comprobado en rojo y en verde). Widget compacto con Monster S1:E35 y progreso; ampliado con 4 elementos; tocar una tarjeta abre la ficha del episodio.
+
+Sin verificar:
+- Lista de "Your devices" con sesiones reales y los botones de pausa/parar: no había otras sesiones activas.
+- Tarjeta "Playing on <dispositivo>" en Inicio, por el mismo motivo.
+- Botón de reproducir del widget (habría cambiado el progreso en el servidor real) y widgets en Android 9–11 y otros launchers.
+- TalkBack de extremo a extremo: solo se añadió el estado de visionado a tarjetas y episodios y la etiqueta del avatar.
+

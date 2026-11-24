@@ -26,8 +26,12 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -49,8 +53,10 @@ import kotlinx.coroutines.coroutineScope
 import xyz.yuuki.novafin.App
 import xyz.yuuki.novafin.HomeSection
 import xyz.yuuki.novafin.Item
+import xyz.yuuki.novafin.Recommendation
+import xyz.yuuki.novafin.Session
 
-data class HomeData(val resume: List<Item>, val nextUp: List<Item>, val views: List<Item>, val latest: List<Pair<Item, List<Item>>>, val top: List<Item>)
+data class HomeData(val resume: List<Item>, val nextUp: List<Item>, val views: List<Item>, val latest: List<Pair<Item, List<Item>>>, val top: List<Item>, val recs: List<Recommendation> = emptyList())
 
 /** Page title with the cast button, and on phones the account button that opens settings. */
 @Composable
@@ -87,9 +93,18 @@ fun HomeScreen() {
             // The libraries row needs the views too.
             val views = if (HomeSection.Latest in sections || HomeSection.Libraries in sections) api.views() else emptyList()
             val latest = if (HomeSection.Latest in sections) views.map { v -> async { v to runCatching { api.latest(v.id) }.getOrDefault(emptyList()) } } else emptyList()
-            HomeData(resume?.await().orEmpty(), next?.await().orEmpty(), views, latest.awaitAll(), top?.await().orEmpty())
+            val recs = if (HomeSection.Recommended in sections) async { runCatching { api.recommendations(null, categories = 2) }.getOrDefault(emptyList()) } else null
+            val resumed = resume?.await().orEmpty()
+            val upNext = next?.await().orEmpty()
+            val topRated = top?.await().orEmpty()
+            val shown = (resumed + upNext + topRated).mapTo(HashSet()) { it.id }
+            // Small libraries get the same few movies in every category; each title is shown once, unwatched, never the movie it's based on.
+            val picks = recs?.await().orEmpty().map { r -> r.copy(items = r.items.filter { i -> !i.userData.played && i.name != r.baseline && shown.add(i.id) }) }.filter { it.items.isNotEmpty() }
+            HomeData(resumed, upNext, views, latest.awaitAll(), topRated, picks)
         }
     }
+    // Never blocks or fails Home.
+    val other = rememberLoad("home:other-device") { runCatching { api.sessions().firstOrNull { it.userName == App.it.prefs.userName && it.nowPlaying != null } }.getOrNull() }
     val list = rememberLazyListState()
     LaunchedEffect(nav.retap) { if (nav.retap > 0) list.animateScrollToItem(0) }
     val tablet = isTablet()
@@ -101,6 +116,7 @@ fun HomeScreen() {
             val hero = d?.resume?.firstOrNull() ?: d?.nextUp?.firstOrNull()
             if (tablet && hero != null) item { Hero(hero) { play(hero, null, null, null) } }
             else item { Header("Home") }
+            other.data?.takeIf { it.id !in dismissedSessions }?.let { s -> item(key = "other-device") { OtherDevice(s, { play(s.nowPlaying!!, s.positionMs, null, null) }) { dismissedSessions.add(s.id) } } }
             when {
                 d != null -> {
                     for (section in sections) when (section) {
@@ -109,6 +125,7 @@ fun HomeScreen() {
                         HomeSection.Latest -> for ((view, items) in d.latest) item(key = "latest-${view.id}") { ItemRow("Latest in ${view.name}", items) }
                         HomeSection.TopUnwatched -> item(key = "top") { ItemRow("Top rated, not watched yet", d.top) }
                         HomeSection.Libraries -> item(key = "libraries") { Libraries(d.views) }
+                        HomeSection.Recommended -> for (rec in d.recs) item(key = "rec-${rec.type}-${rec.baseline}") { ItemRow(rec.title, rec.items) }
                     }
                 }
                 load.error != null -> item {
@@ -120,6 +137,27 @@ fun HomeScreen() {
                 else -> item { LoadingRows() }
             }
         }
+    }
+}
+
+// Until the app restarts.
+private val dismissedSessions = mutableStateListOf<String>()
+
+/** Playback of this user on another device, with a shortcut to carry on here. */
+@Composable
+private fun OtherDevice(session: Session, onContinue: () -> Unit, onClose: () -> Unit) {
+    val item = session.nowPlaying ?: return
+    val title = if (item.isEpisode) listOfNotNull(item.seriesName, item.episodeLabel, item.name).joinToString(" · ") else item.name
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant).padding(start = 16.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("Playing on ${session.deviceName}", style = MaterialTheme.typography.labelMedium, color = Sub)
+            Text(title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+        TextButton(onContinue) { Text("Continue here") }
+        IconButton(onClose) { Icon(Icons.Rounded.Close, "Dismiss") }
     }
 }
 

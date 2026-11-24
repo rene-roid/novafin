@@ -79,6 +79,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import kotlinx.coroutines.launch
 import xyz.yuuki.novafin.LibraryFilter
+import xyz.yuuki.novafin.QueryFilters
 import xyz.yuuki.novafin.Resolution
 import xyz.yuuki.novafin.Watched
 import xyz.yuuki.novafin.decadeYears
@@ -96,8 +97,12 @@ private val sorts = listOf(
     "Release date" to "PremiereDate,Descending",
     "Rating" to "CommunityRating,Descending",
     "Recently watched" to "DatePlayed,Descending",
+    "New episodes" to "DateLastContentAdded,Descending",
     "Random" to "Random,Ascending",
 )
+
+// Series only; movies don't have it.
+private fun supportsNewEpisodes(view: Item?) = view?.collectionType !in setOf("movies", "boxsets", "musicvideos")
 
 private fun typesFor(view: Item) = when (view.collectionType) {
     "movies" -> "Movie"
@@ -167,7 +172,7 @@ fun LibraryScreen() {
                     }
                 }
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    SortMenu(sort) {
+                    SortMenu(sort, supportsNewEpisodes(view)) {
                         sort = it
                         view?.let { v -> prefs.setSort(v.id, it) }
                     }
@@ -198,7 +203,7 @@ fun LibraryScreen() {
                     }
                     TextButton({ setFilter(LibraryFilter()) }) { Text("Clear all") }
                 }
-                if (total >= 0) Text("$total titles", Modifier.padding(vertical = 4.dp), style = MaterialTheme.typography.bodySmall)
+                if (total >= 0) Text(if (total == 1) "1 title" else "$total titles", Modifier.padding(vertical = 4.dp), style = MaterialTheme.typography.bodySmall)
             }
         }
         items(items.value, key = { it.id }) { item -> PosterCard(item, if (tablet) 160.dp else 100.dp, Modifier.fillMaxWidth()) { nav.open(item) } }
@@ -211,7 +216,7 @@ fun LibraryScreen() {
 }
 
 @Composable
-private fun SortMenu(sort: String, onSort: (String) -> Unit) {
+private fun SortMenu(sort: String, newEpisodes: Boolean, onSort: (String) -> Unit) {
     var open by remember { mutableStateOf(false) }
     val (by, order) = sort.split(',').let { it[0] to it.getOrElse(1) { "Ascending" } }
     val desc = order == "Descending"
@@ -221,7 +226,7 @@ private fun SortMenu(sort: String, onSort: (String) -> Unit) {
             Icon(if (desc) Icons.Rounded.ArrowDownward else Icons.Rounded.ArrowUpward, if (desc) "Descending" else "Ascending", Modifier.padding(start = 6.dp).size(18.dp))
         }
         DropdownMenu(open, { open = false }) {
-            sorts.forEach { (label, value) ->
+            sorts.filter { newEpisodes || it.second != "DateLastContentAdded,Descending" }.forEach { (label, value) ->
                 DropdownMenuItem({ Text(label, color = if (value.substringBefore(',') == by) Glow else Color.Unspecified) }, { open = false; onSort(value) })
             }
             HorizontalDivider()
@@ -236,7 +241,10 @@ private fun SortMenu(sort: String, onSort: (String) -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun FilterSheet(view: Item, f: LibraryFilter, onChange: (LibraryFilter) -> Unit, onDismiss: () -> Unit) {
-    val genres = rememberLoad("genres:${view.id}") { App.it.api.genres(view.id, typesFor(view)) }
+    val facets = rememberLoad("filters:${view.id}") {
+        val api = App.it.api
+        runCatching { api.queryFilters(view.id, typesFor(view)) }.getOrElse { QueryFilters(api.genres(view.id, typesFor(view)), emptyList(), emptyList()) }
+    }
     val decades = remember { (1950..java.time.Year.now().value step 10).map { it / 10 * 10 }.distinct() }
     @Composable fun Title(t: String) = Text(t, Modifier.padding(top = 16.dp, bottom = 4.dp), style = MaterialTheme.typography.titleSmall)
     ModalBottomSheet(onDismiss) {
@@ -253,10 +261,16 @@ private fun FilterSheet(view: Item, f: LibraryFilter, onChange: (LibraryFilter) 
             FilterChip(f.favourites, { onChange(f.copy(favourites = !f.favourites)) }, { Text("Favourites only") })
             Title("Genres")
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                genres.data.orEmpty().forEach { g -> FilterChip(g in f.genres, { onChange(f.copy(genres = f.genres.toggle(g))) }, { Text(g) }) }
+                facets.data?.genres.orEmpty().forEach { g -> FilterChip(g in f.genres, { onChange(f.copy(genres = f.genres.toggle(g))) }, { Text(g) }) }
             }
-            if (genres.data == null) {
-                if (genres.error != null) ErrorState(genres.error, genres.refresh) else CircularProgressIndicator(Modifier.padding(8.dp).size(24.dp), strokeWidth = 2.dp)
+            if (facets.data == null) {
+                if (facets.error != null) ErrorState(facets.error, facets.refresh) else CircularProgressIndicator(Modifier.padding(8.dp).size(24.dp), strokeWidth = 2.dp)
+            }
+            if (facets.data?.ratings?.isNotEmpty() == true) {
+                Title("Rating")
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    facets.data.ratings.forEach { g -> FilterChip(g in f.ratings, { onChange(f.copy(ratings = f.ratings.toggle(g))) }, { Text(g) }) }
+                }
             }
             Title("Decades")
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

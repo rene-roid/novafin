@@ -210,6 +210,7 @@ private fun SettingsContent(section: SettingsSection) {
         SettingsSection.Account -> {
             Row2(p.userName ?: "", "${p.serverName ?: "Jellyfin"} · ${app.api.active ?: ""}")
             Row2("Server addresses", "${p.addresses.size} ways to reach this server · automatic switching", { nav.go(Route.Addresses) }) { Icon(Icons.Rounded.ChevronRight, null, tint = Faint) }
+            Row2("Your devices", "See what your other devices are playing and continue here", { nav.go(Route.Devices) }) { Icon(Icons.Rounded.ChevronRight, null, tint = Faint) }
             Row2("Sign out", "Downloads stay on this device", { confirmLogout = true })
         }
         SettingsSection.Home -> {

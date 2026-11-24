@@ -48,6 +48,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
@@ -80,6 +83,7 @@ sealed interface Route {
     data object Downloads : Route
     data object Settings : Route
     data object Addresses : Route
+    data object Devices : Route
     data class Details(val id: String) : Route
     /** Titles across every library sharing a genre or a person. */
     data class Browse(val title: String, val genre: String? = null, val personId: String? = null) : Route
@@ -198,9 +202,9 @@ fun Badges(item: Item, modifier: Modifier = Modifier) {
     val dl by App.it.downloads.states.collectAsStateWithLifecycle()
     Row(modifier.padding(6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         if (dl[item.id]?.done == true) Icon(Icons.Rounded.DownloadDone, "Downloaded", Modifier.size(20.dp).background(Bg.copy(alpha = .7f), CircleShape).padding(2.dp), tint = Glow)
-        if (item.userData.played) Icon(Icons.Rounded.CheckCircle, "Watched", Modifier.size(20.dp).background(Bg.copy(alpha = .7f), CircleShape), tint = Violet)
+        if (item.userData.played) Icon(Icons.Rounded.CheckCircle, null, Modifier.size(20.dp).background(Bg.copy(alpha = .7f), CircleShape), tint = Violet)
         else if (item.userData.unplayed > 0) Text(
-            item.userData.unplayed.toString(), Modifier.background(Violet, RoundedCornerShape(10.dp)).padding(horizontal = 7.dp, vertical = 1.dp),
+            item.userData.unplayed.toString(), Modifier.clearAndSetSemantics {}.background(Violet, RoundedCornerShape(10.dp)).padding(horizontal = 7.dp, vertical = 1.dp),
             style = MaterialTheme.typography.labelSmall,
         )
     }
@@ -217,10 +221,23 @@ fun ProgressLine(item: Item, modifier: Modifier = Modifier) {
     LinearProgressIndicator({ pct.coerceIn(0f, 1f) }, modifier.fillMaxWidth().height(3.dp), color = Glow, trackColor = Color.White.copy(alpha = .25f), drawStopIndicator = {}, gapSize = 0.dp)
 }
 
+/** What TalkBack says about a card beyond its title: watched, how far in, or episodes left. */
+fun watchState(item: Item): String? {
+    val u = item.userData
+    return when {
+        u.played -> "Watched"
+        u.positionMs > 0 && item.runTimeMs > 0 -> "${u.positionMs * 100 / item.runTimeMs}% watched"
+        u.unplayed > 0 -> if (u.unplayed == 1) "1 unwatched episode" else "${u.unplayed} unwatched episodes"
+        else -> null
+    }
+}
+
+private fun Modifier.card(item: Item, onClick: () -> Unit) = clickable(onClick = onClick).semantics(mergeDescendants = true) { watchState(item)?.let { stateDescription = it } }
+
 /** 2:3 poster with title below. */
 @Composable
 fun PosterCard(item: Item, width: Dp, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Column(modifier.width(width).clip(cardShape).clickable(onClick = onClick)) {
+    Column(modifier.width(width).clip(cardShape).card(item, onClick)) {
         Box(Modifier.fillMaxWidth().aspectRatio(2f / 3).clip(cardShape)) {
             Picture(if (item.isEpisode) item.poster else item.poster ?: item.thumb, width, Modifier.fillMaxSize())
             Badges(item, Modifier.align(Alignment.TopEnd))
@@ -237,7 +254,7 @@ fun PosterCard(item: Item, width: Dp, modifier: Modifier = Modifier, onClick: ()
 /** 16:9 still with progress, for continue watching and episodes. */
 @Composable
 fun ThumbCard(item: Item, width: Dp, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Column(modifier.width(width).clip(cardShape).clickable(onClick = onClick)) {
+    Column(modifier.width(width).clip(cardShape).card(item, onClick)) {
         Box(Modifier.fillMaxWidth().aspectRatio(16f / 9).clip(cardShape)) {
             Picture(item.thumb ?: item.poster, width, Modifier.fillMaxSize())
             Badges(item, Modifier.align(Alignment.TopEnd))
