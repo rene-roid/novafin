@@ -82,6 +82,20 @@ fun languageName(code: String) = allLanguages.firstOrNull { sameLang(it.first, c
 private val subModes = listOf(null to "Automatic", "Default" to "Default tracks", "Smart" to "When audio is foreign", "Always" to "Always", "OnlyForced" to "Only forced / signs", "None" to "Never")
 private val colors = listOf(0xFFFFFFFF.toInt() to "White", 0xFFFFE9D2.toInt() to "Cream", 0xFFFFEB3B.toInt() to "Yellow", 0xFF8FE3FF.toInt() to "Cyan")
 
+enum class SettingsSection(val title: String) {
+    Account("Account & servers"),
+    Home("Home screen"),
+    Playback("Playback"),
+    Languages("Languages & subtitles"),
+    Quality("Streaming quality"),
+    Downloads("Downloads & storage"),
+    About("About"),
+}
+
+@Composable
+fun SettingsPageScreen(section: SettingsSection) {
+}
+
 @Composable
 fun PageTop(title: String) {
     val nav = LocalNav.current

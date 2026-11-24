@@ -81,6 +81,9 @@ sealed interface Route {
     data object Settings : Route
     data object Addresses : Route
     data class Details(val id: String) : Route
+    /** Titles across every library sharing a genre or a person. */
+    data class Browse(val title: String, val genre: String? = null, val personId: String? = null) : Route
+    data class SettingsPage(val section: SettingsSection) : Route
 }
 
 class Nav {
@@ -100,6 +103,10 @@ class Nav {
     }
 
     fun open(item: Item) {
+        if (item.isPerson) {
+            go(Route.Browse(item.name, personId = item.id))
+            return
+        }
         // Episodes open their own page; seasons open the show scrolled to them.
         go(Route.Details(if (item.isSeason) item.json.optString("SeriesId").ifEmpty { item.id } else item.id))
     }

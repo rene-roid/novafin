@@ -38,6 +38,15 @@ data class TrackMemory(
     }
 }
 
+/** Rows the home screen can show; [Prefs.homeSections] holds the enabled ones in order. */
+enum class HomeSection(val label: String) {
+    Resume("Continue watching"),
+    NextUp("Next up"),
+    Latest("Recently added"),
+    TopUnwatched("Top rated, not watched yet"),
+    Libraries("Libraries"),
+}
+
 class Prefs(ctx: Context) {
     private val p = ctx.getSharedPreferences("novafin", Context.MODE_PRIVATE)
 
@@ -106,6 +115,11 @@ class Prefs(ctx: Context) {
         get() = p.getStringSet("smartShows", null) ?: emptySet()
         set(v) = p.edit().putStringSet("smartShows", v).apply()
     var imageCacheMb by int("imageCacheMb", 256)
+
+    // ---- home ----
+    var homeSections: List<HomeSection>
+        get() = p.getString("homeSections", null)?.split(',')?.mapNotNull { n -> HomeSection.entries.firstOrNull { it.name == n } } ?: HomeSection.entries
+        set(v) = p.edit().putString("homeSections", v.joinToString(",") { it.name }).apply()
 
     // ---- per-library sort ----
     fun sort(library: String) = p.getString("sort:$library", null) ?: "SortName,Ascending"
