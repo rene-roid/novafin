@@ -3,6 +3,15 @@ package xyz.yuuki.novafin.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.rounded.*
+import androidx.compose.runtime.key
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import coil3.compose.AsyncImage
+import xyz.yuuki.novafin.HomeSection
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -22,11 +31,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.ArrowDownward
-import androidx.compose.material.icons.rounded.ArrowUpward
-import androidx.compose.material.icons.rounded.Cast
-import androidx.compose.material.icons.rounded.Delete
-import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
@@ -82,18 +86,39 @@ fun languageName(code: String) = allLanguages.firstOrNull { sameLang(it.first, c
 private val subModes = listOf(null to "Automatic", "Default" to "Default tracks", "Smart" to "When audio is foreign", "Always" to "Always", "OnlyForced" to "Only forced / signs", "None" to "Never")
 private val colors = listOf(0xFFFFFFFF.toInt() to "White", 0xFFFFE9D2.toInt() to "Cream", 0xFFFFEB3B.toInt() to "Yellow", 0xFF8FE3FF.toInt() to "Cyan")
 
-enum class SettingsSection(val title: String) {
-    Account("Account & servers"),
-    Home("Home screen"),
-    Playback("Playback"),
-    Languages("Languages & subtitles"),
-    Quality("Streaming quality"),
-    Downloads("Downloads & storage"),
-    About("About"),
+enum class SettingsSection(val title: String, val icon: ImageVector) {
+    Account("Account & servers", Icons.Rounded.Person),
+    Home("Home screen", Icons.Rounded.Home),
+    Playback("Playback", Icons.Rounded.PlayArrow),
+    Languages("Languages & subtitles", Icons.Rounded.Translate),
+    Quality("Streaming quality", Icons.Rounded.HighQuality),
+    Downloads("Downloads & storage", Icons.Rounded.Download),
+    About("About", Icons.Rounded.Info),
+}
+
+private fun onOff(b: Boolean) = if (b) "on" else "off"
+
+private fun summary(s: SettingsSection): String {
+    val app = App.it
+    val p = app.prefs
+    fun q(v: String?) = Quality.of(v).label.substringBefore(" ·")
+    return when (s) {
+        SettingsSection.Account -> "${p.serverName ?: "Jellyfin"} · ${p.addresses.size} ${if (p.addresses.size == 1) "address" else "addresses"}"
+        SettingsSection.Home -> "${p.homeSections.size} of ${HomeSection.entries.size} rows shown"
+        SettingsSection.Playback -> "${if (p.autoplayNext) "Autoplay next" else "No autoplay"} · Skip intros ${onOff(p.autoSkipIntro)}"
+        SettingsSection.Languages -> "Audio: ${p.audioLangs.joinToString(", ") { languageName(it) }.ifEmpty { "server default" }} · Subtitles: ${p.subLangs.joinToString(", ") { languageName(it) }.ifEmpty { "server default" }}"
+        SettingsSection.Quality -> "Wi-Fi ${q(p.qualityWifi)} · Mobile ${q(p.qualityMobile)}"
+        SettingsSection.Downloads -> "${q(p.downloadQuality)}${if (p.wifiOnlyDownloads) " · Wi-Fi only" else ""} · ${formatBytes(app.downloads.bytesUsed())} used"
+        SettingsSection.About -> "Novafin ${BuildConfig.VERSION_NAME}"
+    }
 }
 
 @Composable
 fun SettingsPageScreen(section: SettingsSection) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
+        item { PageTop(section.title) }
+        item { Column(Modifier.widthIn(max = 720.dp)) { SettingsContent(section) } }
+    }
 }
 
 @Composable
@@ -106,17 +131,23 @@ fun PageTop(title: String) {
 }
 
 @Composable
-private fun Group(title: String) = Text(title, Modifier.padding(start = 16.dp, top = 24.dp, bottom = 4.dp), style = MaterialTheme.typography.labelLarge, color = Violet)
+private fun Group(title: String) {
+    HorizontalDivider(Modifier.padding(top = 16.dp), color = Color.White.copy(alpha = .08f))
+    Text(title, Modifier.padding(start = 16.dp, top = 16.dp, bottom = 4.dp), style = MaterialTheme.typography.labelLarge, color = Violet)
+}
+
+@Composable
+private fun Note(text: String) = Text(text, Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall, color = Sub)
 
 @Composable
 private fun Row2(title: String, subtitle: String? = null, onClick: (() -> Unit)? = null, trailing: @Composable () -> Unit = {}) {
     Row(
-        Modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier).padding(horizontal = 16.dp, vertical = 12.dp),
+        Modifier.fillMaxWidth().heightIn(min = 56.dp).then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier).padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
-            subtitle?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            subtitle?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Sub) }
         }
         trailing()
     }
@@ -153,94 +184,107 @@ private fun <T> Choice(title: String, options: List<Pair<T, String>>, get: () ->
 @Composable
 private fun SliderRow(title: String, range: ClosedFloatingPointRange<Float>, label: (Float) -> String, get: () -> Float, set: (Float) -> Unit) {
     var v by remember { mutableStateOf(get()) }
-    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Text("$title: ${label(v)}", style = MaterialTheme.typography.bodyLarge)
+    Column(Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Row {
+            Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+            Text(label(v), style = MaterialTheme.typography.bodyMedium, color = Sub)
+        }
         Slider(v, { v = it }, valueRange = range, onValueChangeFinished = { set(v) })
     }
 }
 
 @Composable
-fun SettingsScreen() {
+private fun SettingsContent(section: SettingsSection) {
     val app = App.it
     val p = app.prefs
     val nav = LocalNav.current
     val scope = rememberCoroutineScope()
     var confirmLogout by remember { mutableStateOf(false) }
     var confirmDeleteAll by remember { mutableStateOf(false) }
+    var cacheCleared by remember { mutableStateOf(false) }
+    var advanced by remember { mutableStateOf(false) }
     val streamPresets = Quality.entries.map { it to it.label }
     val downloadPresets = Quality.entries.filter { it != Quality.Auto }.map { it to it.label }
 
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
-        item { PageTop("Settings") }
-        item {
-            Column(Modifier.widthIn(max = 720.dp)) {
-                Group("Account")
-                Row2(p.userName ?: "", "${p.serverName ?: "Jellyfin"} · ${app.api.active ?: ""}")
-                Row2("Server addresses", "${p.addresses.size} · automatic switching", { nav.go(Route.Addresses) })
-                Row2("Sign out", onClick = { confirmLogout = true })
-
-                Group("Playback")
-                Toggle("Autoplay next episode", get = { p.autoplayNext }) { p.autoplayNext = it }
-                Toggle("Skip intros automatically", "Also recaps, when the server has detected them", { p.autoSkipIntro }) { p.autoSkipIntro = it }
-                Toggle("Picture-in-picture when leaving", get = { p.autoPip }) { p.autoPip = it }
-                Toggle("Keep audio playing in the background", "When picture-in-picture is off", { p.backgroundAudio }) { p.backgroundAudio = it }
-                Toggle("Fill the screen by default", "Crops the edges instead of black bars", { p.zoomFill }) { p.zoomFill = it }
-                Toggle("Convert AV1 on the server", "For phones that stutter on AV1", { p.preferTranscodeAv1 }) { p.preferTranscodeAv1 = it }
-
-                Group("Languages")
-                LanguageList("Audio languages", p.serverAudioLang, { p.audioLangs }) { p.audioLangs = it }
-                LanguageList("Subtitle languages", p.serverSubLang, { p.subLangs }) { p.subLangs = it }
-                Choice("Show subtitles", subModes, { p.subMode }) { p.subMode = it }
-                Text(
-                    "Automatic shows your subtitle languages when the audio isn't in one of them, or follows the server when none are set.",
-                    Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodySmall,
-                )
-                Text(
-                    "The first language a video has is used. Changing tracks in a show or movie is remembered for it and wins over these.",
-                    Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodySmall,
-                )
-
-                Group("Subtitle style")
-                SliderRow("Size", .5f..2f, { "${(it * 100).toInt()} %" }, { p.subSize }) { p.subSize = it }
-                Choice("Colour", colors, { p.subColor }) { p.subColor = it }
-                Toggle("Background box", get = { p.subBackground }) { p.subBackground = it }
-                SliderRow("Position from bottom", 0f..0.3f, { "${(it * 100).toInt()} %" }, { p.subBottom }) { p.subBottom = it }
-
-                Group("Streaming quality")
-                Choice("On Wi-Fi", streamPresets, { Quality.of(p.qualityWifi) }) { p.qualityWifi = it.name }
-                Choice("On mobile data", streamPresets, { Quality.of(p.qualityMobile) }) { p.qualityMobile = it.name }
-                Toggle("Smart original", "Play the original file when it's already smaller than the preset", { p.smartOriginal }) { p.smartOriginal = it }
-                Toggle("Stereo downmix", "Converted streams use 2 channels; saves data on phones", { p.downmix }) { p.downmix = it }
-                Toggle("Smaller images on mobile data", get = { p.smallImagesOnMobile }) { p.smallImagesOnMobile = it }
-                Text(
-                    "This server converts video with the CPU in H.264. Turning on hardware acceleration and HEVC encoding in the Jellyfin dashboard makes converted streams and downloads about half the size.",
-                    Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodySmall,
-                )
-
-                Group("Downloads")
-                Choice("Download quality", downloadPresets, { Quality.of(p.downloadQuality, Quality.Medium) }) { p.downloadQuality = it.name }
-                Toggle("Keep all audio languages", "Downloads the original file when the phone can play it", { p.keepBothAudio }) { p.keepBothAudio = it }
-                Toggle("Wi-Fi only", get = { p.wifiOnlyDownloads }) { app.downloads.setWifiOnly(it) }
-                Choice("Storage limit", listOf(0 to "Unlimited", 10 to "10 GB", 25 to "25 GB", 50 to "50 GB", 100 to "100 GB"), { p.storageLimitGb }) { p.storageLimitGb = it }
-                if (app.getExternalFilesDirs(null).size > 1) Toggle(
-                    "Save to SD card", "Applies after restarting the app; existing downloads stay where they are", { p.storageSd },
-                ) { p.storageSd = it }
-                Choice("Delete watched downloads", listOf(-1 to "Never", 0 to "Right away", 1 to "After a day", 7 to "After a week"), { p.autoDeleteDays }) { p.autoDeleteDays = it }
-                Choice("Episodes to keep ahead", listOf(1 to "1", 2 to "2", 3 to "3", 5 to "5", 10 to "10"), { p.smartEpisodes }) { p.smartEpisodes = it }
-                Row2("Storage used", "${formatBytes(app.downloads.bytesUsed())} of downloads · ${formatBytes(app.downloads.freeBytes())} free")
-                Row2("Delete all downloads", onClick = { confirmDeleteAll = true })
-                Choice("Image cache", listOf(128 to "128 MB", 256 to "256 MB", 512 to "512 MB", 1024 to "1 GB"), { p.imageCacheMb }) { p.imageCacheMb = it }
-                Row2("Clear image cache", onClick = {
-                    scope.launch(Dispatchers.IO) {
-                        SingletonImageLoader.get(app).diskCache?.clear()
-                        SingletonImageLoader.get(app).memoryCache?.clear()
-                    }
-                })
-
-                Group("About")
-                Row2("Novafin ${BuildConfig.VERSION_NAME}", "Jellyfin ${p.serverVersion ?: "?"}")
+    when (section) {
+        SettingsSection.Account -> {
+            Row2(p.userName ?: "", "${p.serverName ?: "Jellyfin"} · ${app.api.active ?: ""}")
+            Row2("Server addresses", "${p.addresses.size} ways to reach this server · automatic switching", { nav.go(Route.Addresses) }) { Icon(Icons.Rounded.ChevronRight, null, tint = Faint) }
+            Row2("Sign out", "Downloads stay on this device", { confirmLogout = true })
+        }
+        SettingsSection.Home -> {
+            var enabled by remember { mutableStateOf(p.homeSections) }
+            fun save(l: List<HomeSection>) {
+                enabled = l
+                p.homeSections = l
+            }
+            Note("Choose the rows on the home screen and their order. Home reloads with the new layout.")
+            (enabled + HomeSection.entries.filter { it !in enabled }).forEach { s ->
+                val i = enabled.indexOf(s)
+                Row2(s.label) {
+                    if (i > 0) IconButton({ save(enabled.toMutableList().also { it.add(i - 1, it.removeAt(i)) }) }) { Icon(Icons.Rounded.ArrowUpward, "Move up") }
+                    if (i >= 0 && i < enabled.lastIndex) IconButton({ save(enabled.toMutableList().also { it.add(i + 1, it.removeAt(i)) }) }) { Icon(Icons.Rounded.ArrowDownward, "Move down") }
+                    Switch(i >= 0, { on -> save(if (on) enabled + s else enabled - s) })
+                }
             }
         }
+        SettingsSection.Playback -> {
+            Toggle("Autoplay next episode", "Starts the next episode when one ends", { p.autoplayNext }) { p.autoplayNext = it }
+            Toggle("Suggest a movie when one ends", "Shown in the last seconds; never plays on its own", { p.suggestRelated }) { p.suggestRelated = it }
+            Toggle("Skip intros automatically", "Also recaps, when the server has detected them", { p.autoSkipIntro }) { p.autoSkipIntro = it }
+            Toggle("Picture-in-picture when leaving", "Keeps the video in a small window", { p.autoPip }) { p.autoPip = it }
+            Toggle("Keep audio playing in the background", "When picture-in-picture is off", { p.backgroundAudio }) { p.backgroundAudio = it }
+            Toggle("Fill the screen by default", "Crops the edges instead of black bars", { p.zoomFill }) { p.zoomFill = it }
+        }
+        SettingsSection.Languages -> {
+            Group("Languages")
+            LanguageList("Audio languages", p.serverAudioLang, { p.audioLangs }) { p.audioLangs = it }
+            LanguageList("Subtitle languages", p.serverSubLang, { p.subLangs }) { p.subLangs = it }
+            Choice("Show subtitles", subModes, { p.subMode }) { p.subMode = it }
+            Note("Automatic shows your subtitle languages when the audio isn't in one of them, or follows the server when none are set.")
+            Note("The first language a video has is used. Changing tracks in a show or movie is remembered for it and wins over these.")
+            Group("Subtitle style")
+            SliderRow("Size", .5f..2f, { "${(it * 100).toInt()} %" }, { p.subSize }) { p.subSize = it }
+            Choice("Colour", colors, { p.subColor }) { p.subColor = it }
+            Toggle("Background box", "A dark box behind the text", { p.subBackground }) { p.subBackground = it }
+            SliderRow("Position from bottom", 0f..0.3f, { "${(it * 100).toInt()} %" }, { p.subBottom }) { p.subBottom = it }
+        }
+        SettingsSection.Quality -> {
+            Choice("On Wi-Fi", streamPresets, { Quality.of(p.qualityWifi) }) { p.qualityWifi = it.name }
+            Choice("On mobile data", streamPresets, { Quality.of(p.qualityMobile) }) { p.qualityMobile = it.name }
+            HorizontalDivider(Modifier.padding(top = 16.dp), color = Color.White.copy(alpha = .08f))
+            Row2("Advanced", "Conversion and data saving", { advanced = !advanced }) { Icon(if (advanced) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, if (advanced) "Collapse" else "Expand", tint = Faint) }
+            if (advanced) {
+                Toggle("Smart original", "Play the original file when it's already smaller than the preset", { p.smartOriginal }) { p.smartOriginal = it }
+                Toggle("Stereo downmix", "Converted streams use 2 channels; saves data on phones", { p.downmix }) { p.downmix = it }
+                Toggle("Smaller images on mobile data", "Loads lower resolution posters", { p.smallImagesOnMobile }) { p.smallImagesOnMobile = it }
+                Toggle("Convert AV1 on the server", "For phones that stutter on AV1", { p.preferTranscodeAv1 }) { p.preferTranscodeAv1 = it }
+                Note("This server converts video with the CPU in H.264. Turning on hardware acceleration and HEVC encoding in the Jellyfin dashboard makes converted streams and downloads about half the size.")
+            }
+        }
+        SettingsSection.Downloads -> {
+            Choice("Download quality", downloadPresets, { Quality.of(p.downloadQuality, Quality.Medium) }) { p.downloadQuality = it.name }
+            Toggle("Keep all audio languages", "Downloads the original file when the phone can play it", { p.keepBothAudio }) { p.keepBothAudio = it }
+            Toggle("Wi-Fi only", "Pauses downloads on mobile data", { p.wifiOnlyDownloads }) { app.downloads.setWifiOnly(it) }
+            Choice("Storage limit", listOf(0 to "Unlimited", 10 to "10 GB", 25 to "25 GB", 50 to "50 GB", 100 to "100 GB"), { p.storageLimitGb }) { p.storageLimitGb = it }
+            if (app.getExternalFilesDirs(null).size > 1) Toggle(
+                "Save to SD card", "Applies after restarting the app; existing downloads stay where they are", { p.storageSd },
+            ) { p.storageSd = it }
+            Choice("Delete watched downloads", listOf(-1 to "Never", 0 to "Right away", 1 to "After a day", 7 to "After a week"), { p.autoDeleteDays }) { p.autoDeleteDays = it }
+            Choice("Episodes to keep ahead", listOf(1 to "1", 2 to "2", 3 to "3", 5 to "5", 10 to "10"), { p.smartEpisodes }) { p.smartEpisodes = it }
+            Group("Storage")
+            Row2("Storage used", "${formatBytes(app.downloads.bytesUsed())} of downloads · ${formatBytes(app.downloads.freeBytes())} free")
+            Row2("Delete all downloads", "Removes every downloaded video from this device", { confirmDeleteAll = true })
+            Choice("Image cache", listOf(128 to "128 MB", 256 to "256 MB", 512 to "512 MB", 1024 to "1 GB"), { p.imageCacheMb }) { p.imageCacheMb = it }
+            Row2("Clear image cache", if (cacheCleared) "Cleared" else "Posters and backdrops load again when needed", {
+                scope.launch(Dispatchers.IO) {
+                    SingletonImageLoader.get(app).diskCache?.clear()
+                    SingletonImageLoader.get(app).memoryCache?.clear()
+                    cacheCleared = true
+                }
+            })
+        }
+        SettingsSection.About -> Row2("Novafin ${BuildConfig.VERSION_NAME}", "Jellyfin ${p.serverVersion ?: "?"}")
     }
 
     if (confirmLogout) AlertDialog(
@@ -265,6 +309,70 @@ fun SettingsScreen() {
         confirmButton = { TextButton({ app.downloads.removeAll(); confirmDeleteAll = false }) { Text("Delete") } },
         dismissButton = { TextButton({ confirmDeleteAll = false }) { Text("Cancel") } },
     )
+}
+
+@Composable
+private fun AccountCard() {
+    val app = App.it
+    val p = app.prefs
+    val active = app.api.active
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).clip(RoundedCornerShape(16.dp)).background(Raised).padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(56.dp).clip(CircleShape).background(Violet), contentAlignment = Alignment.Center) {
+            Text(p.userName?.take(1)?.uppercase() ?: "?", style = MaterialTheme.typography.headlineSmall)
+            AsyncImage(app.api.userImageUrl(168), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        }
+        Column(Modifier.weight(1f).padding(start = 16.dp)) {
+            Text(p.userName ?: "", style = MaterialTheme.typography.titleMedium)
+            Text(p.serverName ?: "Jellyfin", style = MaterialTheme.typography.bodyMedium, color = Sub)
+            if (active != null) Text("${addressKind(active).name} · $active", style = MaterialTheme.typography.bodySmall, color = Sub, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+@Composable
+private fun CategoryRow(s: SettingsSection, selected: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(horizontal = 8.dp).clip(RoundedCornerShape(12.dp)).background(if (selected) Raised2 else Color.Transparent)
+            .clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(s.icon, null, Modifier.padding(horizontal = 8.dp), tint = if (selected) Glow else Violet)
+        Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
+            Text(s.title, style = MaterialTheme.typography.bodyLarge)
+            Text(summary(s), style = MaterialTheme.typography.bodySmall, color = Sub, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+        if (!selected) Icon(Icons.Rounded.ChevronRight, null, tint = Faint)
+    }
+}
+
+@Composable
+fun SettingsScreen() {
+    val nav = LocalNav.current
+    if (widthClass() == Width.Expanded) {
+        var selected by remember { mutableStateOf(SettingsSection.Account) }
+        Row(Modifier.fillMaxSize()) {
+            LazyColumn(Modifier.width(340.dp).fillMaxHeight(), contentPadding = PaddingValues(bottom = 32.dp)) {
+                item { PageTop("Settings") }
+                item { AccountCard() }
+                items(SettingsSection.entries) { s -> CategoryRow(s, s == selected) { selected = s } }
+            }
+            // Keyed so each page starts with fresh dialog and toggle state.
+            key(selected) { SettingsPageBody(selected) }
+        }
+    } else LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
+        item { PageTop("Settings") }
+        item { Column(Modifier.widthIn(max = 720.dp)) { AccountCard() } }
+        items(SettingsSection.entries) { s -> Column(Modifier.widthIn(max = 720.dp)) { CategoryRow(s, false) { nav.go(Route.SettingsPage(s)) } } }
+    }
+}
+
+@Composable
+private fun SettingsPageBody(section: SettingsSection) = LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
+    item { PageTop(section.title) }
+    item { Column(Modifier.widthIn(max = 720.dp)) { SettingsContent(section) } }
 }
 
 /** The server's addresses: live status, order, pinning and which one a Chromecast can use. */
@@ -294,6 +402,7 @@ fun AddressesScreen() {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
         item { PageTop("Server addresses") }
         item {
+            Text("${app.prefs.serverName ?: "Jellyfin"} · ${list.size} ${if (list.size == 1) "address" else "addresses"}", Modifier.padding(start = 16.dp, top = 8.dp), style = MaterialTheme.typography.titleMedium)
             Text(
                 "Novafin checks every address and uses the best one that answers, earlier ones first when they're nearly as fast. It re-checks when the network changes, when a request fails and every few minutes.",
                 Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall,
@@ -311,7 +420,13 @@ fun AddressesScreen() {
             Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(10.dp).clip(CircleShape).background(when { !known -> Faint; ms == null -> Dusk; else -> Color(0xFF7EE0A1) }))
                 Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                    Text(a.label + if (a.url == active) " · in use" else "", style = MaterialTheme.typography.titleSmall, color = if (a.url == active) Glow else Color.White)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(a.label + if (a.url == active) " · in use" else "", Modifier.weight(1f, fill = false), style = MaterialTheme.typography.titleSmall, color = if (a.url == active) Glow else Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            addressKind(a.url).name, Modifier.padding(start = 8.dp).clip(RoundedCornerShape(6.dp)).background(Raised2).padding(horizontal = 6.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall, color = Sub,
+                        )
+                    }
                     Text(a.url, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(
                         when { !known -> "Checking…"; ms == null -> "Not reachable"; else -> "$ms ms" } + if (a.tv) " · reachable from TV" else "",
