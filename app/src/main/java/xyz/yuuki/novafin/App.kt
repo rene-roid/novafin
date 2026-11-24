@@ -45,7 +45,11 @@ class App : Application(), SingletonImageLoader.Factory {
         api = Api(prefs, scope) { signOut() }
         loggedIn.value = prefs.loggedIn
         runCatching { Cast.getSingletonInstance(this).initialize() }
-        if (prefs.loggedIn) api.reconnect()
+        if (prefs.loggedIn) {
+            api.reconnect()
+            // Admin status and the server's language preferences can change after sign-in.
+            scope.launch { runCatching { api.withFailover { api.loadUserConfig() } } }
+        }
 
         getSystemService(ConnectivityManager::class.java).registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
             override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
@@ -68,7 +72,10 @@ class App : Application(), SingletonImageLoader.Factory {
             }
 
             override fun onActivityStopped(a: Activity) {
-                if (--started == 0) backgroundSince = System.currentTimeMillis()
+                if (--started == 0) {
+                    backgroundSince = System.currentTimeMillis()
+                    HomeWidget.refresh(this@App)
+                }
             }
 
             override fun onActivityCreated(a: Activity, b: Bundle?) {}
@@ -95,6 +102,7 @@ class App : Application(), SingletonImageLoader.Factory {
     fun signOut() {
         prefs.logout()
         loggedIn.value = false
+        HomeWidget.refresh(this)
     }
 
     /**

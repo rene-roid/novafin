@@ -1,4 +1,13 @@
 <resources>
     <string name="app_name">Novafin</string>
     <string name="downloads">Downloads</string>
+    <string name="widget_resume_name">Continue watching</string>
+    <string name="widget_resume_desc">Pick up where you left off.</string>
+    <string name="widget_nextup_name">Next up</string>
+    <string name="widget_nextup_desc">The next episode of the shows you follow.</string>
+    <string name="widget_play">Play</string>
+    <string name="widget_signin">Sign in to Novafin</string>
+    <string name="widget_signin_sub">Tap to open the app</string>
+    <string name="widget_empty">Nothing to continue</string>
+    <string name="widget_empty_sub">You\'re all caught up</string>
 </resources>
