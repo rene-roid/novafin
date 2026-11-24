@@ -38,6 +38,15 @@ data class TrackMemory(
     }
 }
 
+/** Rows the home screen can show; [Prefs.homeSections] holds the enabled ones in order. */
+enum class HomeSection(val label: String) {
+    Resume("Continue watching"),
+    NextUp("Next up"),
+    Latest("Recently added"),
+    TopUnwatched("Top rated, not watched yet"),
+    Libraries("Libraries"),
+}
+
 class Prefs(ctx: Context) {
     private val p = ctx.getSharedPreferences("novafin", Context.MODE_PRIVATE)
 
@@ -65,6 +74,8 @@ class Prefs(ctx: Context) {
 
     // ---- playback ----
     var autoplayNext by bool("autoplayNext", true)
+    /** After a movie or a show's last episode, suggest a similar movie (never autoplayed). */
+    var suggestRelated by bool("suggestRelated", true)
     var autoSkipIntro by bool("autoSkipIntro", false)
     var autoPip by bool("autoPip", true)
     var backgroundAudio by bool("backgroundAudio", false)
@@ -106,6 +117,16 @@ class Prefs(ctx: Context) {
         get() = p.getStringSet("smartShows", null) ?: emptySet()
         set(v) = p.edit().putStringSet("smartShows", v).apply()
     var imageCacheMb by int("imageCacheMb", 256)
+
+    // ---- home ----
+    var homeSections: List<HomeSection>
+        get() = p.getString("homeSections", null)?.split(',')?.mapNotNull { n -> HomeSection.entries.firstOrNull { it.name == n } } ?: HomeSection.entries
+        set(v) = p.edit().putString("homeSections", v.joinToString(",") { it.name }).apply()
+
+    /** Newest first; one per line since a search can contain commas. */
+    var recentSearches: List<String>
+        get() = p.getString("recentSearches", null)?.split('\n')?.filter { it.isNotBlank() } ?: emptyList()
+        set(v) = p.edit().putString("recentSearches", v.take(8).joinToString("\n")).apply()
 
     // ---- per-library sort ----
     fun sort(library: String) = p.getString("sort:$library", null) ?: "SortName,Ascending"

@@ -71,6 +71,7 @@ import androidx.navigation3.ui.NavDisplay
 import kotlinx.coroutines.delay
 import xyz.yuuki.novafin.ui.AddressesScreen
 import xyz.yuuki.novafin.ui.Bg
+import xyz.yuuki.novafin.ui.BrowseScreen
 import xyz.yuuki.novafin.ui.CastBar
 import xyz.yuuki.novafin.ui.Cosmos
 import xyz.yuuki.novafin.ui.DetailsScreen
@@ -87,6 +88,7 @@ import xyz.yuuki.novafin.ui.Raised
 import xyz.yuuki.novafin.ui.Raised2
 import xyz.yuuki.novafin.ui.Route
 import xyz.yuuki.novafin.ui.SearchScreen
+import xyz.yuuki.novafin.ui.SettingsPageScreen
 import xyz.yuuki.novafin.ui.SettingsScreen
 import xyz.yuuki.novafin.ui.Sub
 import xyz.yuuki.novafin.ui.isTablet
@@ -183,6 +185,8 @@ private fun Shell() {
                                     Route.Settings -> SettingsScreen()
                                     Route.Addresses -> AddressesScreen()
                                     is Route.Details -> DetailsScreen(r.id)
+                                    is Route.Browse -> BrowseScreen(r)
+                                    is Route.SettingsPage -> SettingsPageScreen(r.section)
                                 }
                             }
                         },

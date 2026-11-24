@@ -280,15 +280,27 @@ class Api(private val prefs: Prefs, private val scope: CoroutineScope, private v
         start: Int = 0,
         limit: Int = 100,
         recursive: Boolean = true,
+        extra: List<Pair<String, Any?>> = emptyList(),
     ): Page {
         val (by, order) = sort.split(',').let { it[0] to it.getOrElse(1) { "Ascending" } }
         val o = get(
             "/Items", "userId" to prefs.userId, "parentId" to parentId, "includeItemTypes" to types, "sortBy" to by, "sortOrder" to order,
             "filters" to filters, "searchTerm" to search, "startIndex" to start, "limit" to limit, "recursive" to recursive,
-            "fields" to listFields, "enableImageTypes" to imageTypes, "imageTypeLimit" to 1,
+            "fields" to listFields, "enableImageTypes" to imageTypes, "imageTypeLimit" to 1, *extra.toTypedArray(),
         )
         return Page(Item.list(o), o.optInt("TotalRecordCount"))
     }
+
+    /** Jellyfin's own "more like this": shared genres, tags, people and studios. */
+    suspend fun similar(id: String, limit: Int = 16) =
+        Item.list(get("/Items/$id/Similar", "userId" to prefs.userId, "limit" to limit, "fields" to listFields, "enableImageTypes" to imageTypes))
+
+    /** Genre names used in [parentId] (a library, or every library when null). */
+    suspend fun genres(parentId: String?, types: String?) =
+        Item.list(get("/Genres", "userId" to prefs.userId, "parentId" to parentId, "includeItemTypes" to types, "sortBy" to "SortName")).map { it.name }
+
+    suspend fun people(search: String, limit: Int = 20) =
+        Item.list(get("/Persons", "userId" to prefs.userId, "searchTerm" to search, "limit" to limit, "enableImageTypes" to "Primary"))
 
     suspend fun item(id: String) = Item(get("/Items/$id", "userId" to prefs.userId, "fields" to fields))
 

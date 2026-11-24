@@ -41,6 +41,7 @@ class Item(val json: JSONObject) {
     val isEpisode get() = type == "Episode"
     val isSeries get() = type == "Series"
     val isSeason get() = type == "Season"
+    val isPerson get() = type == "Person"
     val playable get() = type == "Movie" || type == "Episode" || type == "Video" || type == "MusicVideo"
 
     /** "S1:E5" for episodes. */
