@@ -41,6 +41,7 @@ import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.Subtitles
 import androidx.compose.material.icons.rounded.VolumeUp
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -109,6 +110,7 @@ private fun BackBar(modifier: Modifier = Modifier) {
 
 @Composable
 private fun Details(item: Item, refresh: () -> Unit) {
+    val nav = LocalNav.current
     val tablet = widthClass() == Width.Expanded
     val seasons = if (item.isSeries || item.isEpisode) rememberLoad("seasons:${item.seriesId ?: item.id}") {
         val sid = item.seriesId ?: item.id
@@ -128,7 +130,7 @@ private fun Details(item: Item, refresh: () -> Unit) {
                 }
                 LazyColumn(Modifier.weight(1f).fillMaxSize(), contentPadding = PaddingValues(top = 48.dp, end = 24.dp, bottom = 32.dp)) {
                     item { Title(item) }
-                    body(item, seasons, refresh)
+                    body(item, seasons, nav, refresh)
                 }
             }
         }
@@ -143,13 +145,14 @@ private fun Details(item: Item, refresh: () -> Unit) {
             }
             item { Title(item) }
             item { Actions(item, refresh) }
-            body(item, seasons, refresh)
+            body(item, seasons, nav, refresh)
         }
     }
 }
 
 @Composable
 private fun Title(item: Item) {
+    val nav = LocalNav.current
     Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (item.isEpisode) Text(item.seriesName ?: "", style = MaterialTheme.typography.titleMedium, color = Dusk)
         val logo = item.logo?.takeIf { !item.isEpisode }
@@ -167,7 +170,9 @@ private fun Title(item: Item) {
                 Text("%.1f".format(it), style = MaterialTheme.typography.bodyMedium, color = Sub)
             }
         }
-        if (item.genres.isNotEmpty()) Text(item.genres.take(4).joinToString(", "), style = MaterialTheme.typography.bodySmall)
+        if (item.genres.isNotEmpty()) LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(item.genres.take(4)) { g -> AssistChip({ nav.go(Route.Browse(g, genre = g)) }, { Text(g) }) }
+        }
         Gap(8.dp)
     }
 }
@@ -189,7 +194,8 @@ private fun Actions(item: Item, refresh: () -> Unit) {
     var sub by remember(item) { mutableStateOf(pickSubtitle(streams, mem, defaults, streams.firstOrNull { it.index == audio }?.language)) }
     // Shows play their next episode.
     val nextUp = if (item.isSeries) rememberLoad("nextup:${item.id}") {
-        app.api.episodes(item.id).let { eps -> eps.firstOrNull { !it.userData.played } ?: eps.firstOrNull() }
+        // Specials (season 0) come first in the list but shouldn't be where a new show starts.
+        app.api.episodes(item.id).sortedBy { it.parentIndex == 0 }.let { eps -> eps.firstOrNull { !it.userData.played } ?: eps.firstOrNull() }
     }.data else null
     val target = if (item.isSeries) nextUp else item.takeIf { it.playable }
 
@@ -269,7 +275,7 @@ private fun TrackPicker(icon: androidx.compose.ui.graphics.vector.ImageVector, s
     }
 }
 
-private fun LazyListScope.body(item: Item, seasons: Load<List<Item>>?, refresh: () -> Unit) {
+private fun LazyListScope.body(item: Item, seasons: Load<List<Item>>?, nav: Nav, refresh: () -> Unit) {
     item.overview?.let { o ->
         item { Text(o, Modifier.padding(horizontal = 16.dp).padding(bottom = 8.dp), style = MaterialTheme.typography.bodyMedium, color = Sub) }
     }
@@ -279,7 +285,7 @@ private fun LazyListScope.body(item: Item, seasons: Load<List<Item>>?, refresh: 
         Section("Cast") {
             LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(people.take(30), key = { it.id + it.role }) { p ->
-                    Column(Modifier.width(88.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Column(Modifier.width(88.dp).clip(RoundedCornerShape(8.dp)).clickable { nav.go(Route.Browse(p.name, personId = p.id)) }, horizontalAlignment = Alignment.CenterHorizontally) {
                         Box(Modifier.size(80.dp).clip(CircleShape).background(Raised)) {
                             if (p.imageTag != null) AsyncImage(App.it.api.personImageUrl(p.id, 200), p.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                         }
@@ -289,6 +295,10 @@ private fun LazyListScope.body(item: Item, seasons: Load<List<Item>>?, refresh: 
                 }
             }
         }
+    }
+    if (item.isSeries || item.isEpisode || item.type == "Movie") item {
+        val similar = rememberLoad("similar:${item.seriesId ?: item.id}") { App.it.api.similar(item.seriesId ?: item.id) }
+        ItemRow("More like this", similar.data.orEmpty())
     }
     if (item.type == "BoxSet") item {
         val children = rememberLoad("children:${item.id}") { App.it.api.items(parentId = item.id, recursive = false).items }

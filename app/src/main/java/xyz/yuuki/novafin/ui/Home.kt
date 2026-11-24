@@ -37,6 +37,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.media3.cast.MediaRouteButton
@@ -45,9 +47,10 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import xyz.yuuki.novafin.App
+import xyz.yuuki.novafin.HomeSection
 import xyz.yuuki.novafin.Item
 
-data class HomeData(val resume: List<Item>, val nextUp: List<Item>, val views: List<Item>, val latest: List<Pair<Item, List<Item>>>)
+data class HomeData(val resume: List<Item>, val nextUp: List<Item>, val views: List<Item>, val latest: List<Pair<Item, List<Item>>>, val top: List<Item>)
 
 /** Page title with the cast button, and on phones the account button that opens settings. */
 @Composable
@@ -58,7 +61,7 @@ fun Header(title: String, modifier: Modifier = Modifier, inGrid: Boolean = false
         Text(title, Modifier.weight(1f), style = MaterialTheme.typography.headlineMedium)
         MediaRouteButton(Modifier.size(48.dp))
         if (!isTablet()) Box(
-            Modifier.padding(start = 4.dp).size(36.dp).clip(CircleShape).background(Violet).clickable { nav.go(Route.Settings) },
+            Modifier.padding(start = 4.dp).size(36.dp).clip(CircleShape).background(Violet).clickable(onClickLabel = "Open settings") { nav.go(Route.Settings) }.semantics { contentDescription = "Settings" },
             contentAlignment = Alignment.Center,
         ) {
             Text(App.it.prefs.userName?.take(1)?.uppercase() ?: "?", style = MaterialTheme.typography.titleMedium)
@@ -72,13 +75,19 @@ fun Header(title: String, modifier: Modifier = Modifier, inGrid: Boolean = false
 fun HomeScreen() {
     val api = App.it.api
     val nav = LocalNav.current
-    val load = rememberLoad("home") {
+    val sections = App.it.prefs.homeSections
+    val load = rememberLoad("home:${sections.joinToString(",") { it.name }}") {
         coroutineScope {
-            val resume = async { api.resume() }
-            val next = async { api.nextUp() }
-            val views = api.views()
-            val latest = views.map { v -> async { v to runCatching { api.latest(v.id) }.getOrDefault(emptyList()) } }
-            HomeData(resume.await(), next.await(), views, latest.awaitAll())
+            val resume = if (HomeSection.Resume in sections) async { api.resume() } else null
+            val next = if (HomeSection.NextUp in sections) async { api.nextUp() } else null
+            val top = if (HomeSection.TopUnwatched in sections) async {
+                // The server lets fully watched series through IsUnplayed, so drop them here.
+                runCatching { api.items(types = "Movie,Series", filters = "IsUnplayed", sort = "CommunityRating,Descending", limit = 30, extra = listOf("minCommunityRating" to 7)).items.filterNot { it.userData.played }.take(20) }.getOrDefault(emptyList())
+            } else null
+            // The libraries row needs the views too.
+            val views = if (HomeSection.Latest in sections || HomeSection.Libraries in sections) api.views() else emptyList()
+            val latest = if (HomeSection.Latest in sections) views.map { v -> async { v to runCatching { api.latest(v.id) }.getOrDefault(emptyList()) } } else emptyList()
+            HomeData(resume?.await().orEmpty(), next?.await().orEmpty(), views, latest.awaitAll(), top?.await().orEmpty())
         }
     }
     val list = rememberLazyListState()
@@ -94,10 +103,13 @@ fun HomeScreen() {
             else item { Header("Home") }
             when {
                 d != null -> {
-                    item { ItemRow("Continue watching", d.resume, thumbs = true) }
-                    item { ItemRow("Next up", d.nextUp, thumbs = true) }
-                    for ((view, items) in d.latest) item(key = "latest-${view.id}") { ItemRow("Latest in ${view.name}", items) }
-                    item { Libraries(d.views) }
+                    for (section in sections) when (section) {
+                        HomeSection.Resume -> item(key = "resume") { ItemRow("Continue watching", d.resume, thumbs = true) }
+                        HomeSection.NextUp -> item(key = "nextup") { ItemRow("Next up", d.nextUp, thumbs = true) }
+                        HomeSection.Latest -> for ((view, items) in d.latest) item(key = "latest-${view.id}") { ItemRow("Latest in ${view.name}", items) }
+                        HomeSection.TopUnwatched -> item(key = "top") { ItemRow("Top rated, not watched yet", d.top) }
+                        HomeSection.Libraries -> item(key = "libraries") { Libraries(d.views) }
+                    }
                 }
                 load.error != null -> item {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
