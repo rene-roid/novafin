@@ -84,7 +84,7 @@ fun BrowseScreen(route: Route.Browse) {
                     }
                     person?.overview?.let { Text(it, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = Sub, maxLines = 6, overflow = TextOverflow.Ellipsis) }
                 }
-                if (total >= 0) Text("$total titles", Modifier.padding(vertical = 4.dp), style = MaterialTheme.typography.bodySmall)
+                if (total >= 0) Text(if (total == 1) "1 title" else "$total titles", Modifier.padding(vertical = 4.dp), style = MaterialTheme.typography.bodySmall)
             }
         }
         items(items.value, key = { it.id }) { item -> PosterCard(item, if (tablet) 160.dp else 100.dp, Modifier.fillMaxWidth()) { nav.open(item) } }
