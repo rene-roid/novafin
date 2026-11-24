@@ -66,6 +66,9 @@ object HomeWidget {
         }
     }
 
+    /** After switching accounts: the snapshots show the previous one's titles. */
+    fun forget(ctx: Context) = WidgetKind.entries.forEach { file(ctx, it).delete() }
+
     internal fun update(ctx: Context, mgr: AppWidgetManager, ids: IntArray, kind: WidgetKind, pending: BroadcastReceiver.PendingResult) {
         val app = App.it
         app.scope.launch {

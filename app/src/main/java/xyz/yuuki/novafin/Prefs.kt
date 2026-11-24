@@ -16,6 +16,44 @@ data class Address(val url: String, val label: String, val tv: Boolean = false) 
     }
 }
 
+/** One signed-in user on one server: what [Prefs] keeps per session. There is no password to keep. */
+data class Account(
+    val serverId: String,
+    val serverName: String?,
+    val serverVersion: String?,
+    val userId: String,
+    val userName: String?,
+    val token: String,
+    val addresses: List<Address>,
+    val active: String? = null,
+    val pinned: String? = null,
+    val isAdmin: Boolean = false,
+    val audioLang: String? = null,
+    val subLang: String? = null,
+    val subMode: String? = null,
+) {
+    fun same(o: Account) = serverId == o.serverId && userId == o.userId
+
+    fun toJson(): JSONObject = JSONObject().put("serverId", serverId).put("serverName", serverName).put("serverVersion", serverVersion)
+        .put("userId", userId).put("userName", userName).put("token", token).put("addresses", JSONArray(addresses.map { it.toJson() }))
+        .put("active", active).put("pinned", pinned).put("isAdmin", isAdmin).put("audioLang", audioLang).put("subLang", subLang).put("subMode", subMode)
+
+    companion object {
+        fun from(o: JSONObject) = Account(
+            o.getString("serverId"), o.s("serverName"), o.s("serverVersion"), o.getString("userId"), o.s("userName"), o.getString("token"),
+            o.optJSONArray("addresses").objects().map(Address::from), o.s("active"), o.s("pinned"), o.optBoolean("isAdmin"),
+            o.s("audioLang"), o.s("subLang"), o.s("subMode"),
+        )
+    }
+}
+
+/**
+ * Makes [target] the account in use: the one it replaces joins the saved ones, most recent first.
+ * A saved copy of the same user on the same server is replaced, never duplicated.
+ */
+fun switchAccount(current: Account?, others: List<Account>, target: Account): Pair<Account, List<Account>> =
+    target to (listOfNotNull(current) + others).filterNot { it.same(target) }
+
 /** What the user last picked for a show or movie. Languages are Jellyfin's ISO 639-2 codes ("jpn"). */
 data class TrackMemory(
     val audioLang: String? = null,
@@ -64,7 +102,11 @@ class Prefs(ctx: Context) {
     var serverVersion by str("serverVersion")
     var userId by str("userId")
     var userName by str("userName")
-    var token by str("token")
+    /** Set while [Api] still points at the previous account's server, so its requests carry no token until it has moved. */
+    @Volatile var switching = false
+    var token: String?
+        get() = if (switching) null else p.getString("token", null)
+        set(v) = p.edit().putString("token", v).apply()
     var addresses: List<Address>
         get() = p.getString("addresses", null)?.let { JSONArray(it).objects().map(Address::from) } ?: emptyList()
         set(v) = p.edit().putString("addresses", JSONArray(v.map { it.toJson() }).toString()).apply()
@@ -79,6 +121,25 @@ class Prefs(ctx: Context) {
     var isAdmin by bool("isAdmin", false)
 
     val loggedIn get() = token != null && addresses.isNotEmpty()
+
+    /** The account in use, as stored in the flat keys above. */
+    val account: Account?
+        get() = Account(
+            serverId ?: return null, serverName, serverVersion, userId ?: return null, userName, p.getString("token", null) ?: return null,
+            addresses, active, pinned, isAdmin, serverAudioLang, serverSubLang, serverSubMode,
+        )
+    /** Signed-in accounts other than the one in use. */
+    var otherAccounts: List<Account>
+        get() = p.getString("accounts", null)?.let { JSONArray(it).objects().map(Account::from) } ?: emptyList()
+        set(v) = p.edit().putString("accounts", JSONArray(v.map { it.toJson() }).toString()).apply()
+
+    /** One write, so being killed mid-switch can't lose or duplicate an account. */
+    fun setAccounts(current: Account, others: List<Account>) = p.edit()
+        .putString("serverId", current.serverId).putString("serverName", current.serverName).putString("serverVersion", current.serverVersion)
+        .putString("userId", current.userId).putString("userName", current.userName).putString("token", current.token)
+        .putString("addresses", JSONArray(current.addresses.map { it.toJson() }).toString()).putString("active", current.active).putString("pinned", current.pinned)
+        .putBoolean("isAdmin", current.isAdmin).putString("serverAudioLang", current.audioLang).putString("serverSubLang", current.subLang).putString("serverSubMode", current.subMode)
+        .putString("accounts", JSONArray(others.map { it.toJson() }).toString()).apply()
 
     // ---- playback ----
     var autoplayNext by bool("autoplayNext", true)
@@ -122,8 +183,13 @@ class Prefs(ctx: Context) {
     /** Next unwatched episodes kept downloaded for shows in [smartShows]. */
     var smartEpisodes by int("smartEpisodes", 3)
     var smartShows: Set<String>
-        get() = p.getStringSet("smartShows", null) ?: emptySet()
-        set(v) = p.edit().putStringSet("smartShows", v).apply()
+        get() = p.getStringSet("smartShows:$serverId", null) ?: emptySet()
+        set(v) = p.edit().putStringSet("smartShows:$serverId", v).apply()
+    init {
+        // One global set before there were accounts: it belongs to the server signed in back then.
+        val old = p.getStringSet("smartShows", null)
+        if (old != null && serverId != null) p.edit().putStringSet("smartShows:$serverId", old).remove("smartShows").apply()
+    }
     var imageCacheMb by int("imageCacheMb", 256)
 
     // ---- home ----

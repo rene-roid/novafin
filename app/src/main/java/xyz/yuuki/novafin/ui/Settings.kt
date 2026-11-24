@@ -61,7 +61,12 @@ import coil3.SingletonImageLoader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import xyz.yuuki.novafin.Account
 import xyz.yuuki.novafin.Address
+import xyz.yuuki.novafin.ApiException
+import xyz.yuuki.novafin.Playback
 import xyz.yuuki.novafin.AddressKind
 import xyz.yuuki.novafin.Api
 import xyz.yuuki.novafin.App
@@ -208,10 +213,58 @@ private fun SettingsContent(section: SettingsSection) {
 
     when (section) {
         SettingsSection.Account -> {
-            Row2(p.userName ?: "", "${p.serverName ?: "Jellyfin"} · ${app.api.active ?: ""}")
+            var others by remember { mutableStateOf(p.otherAccounts) }
+            var switchTo by remember { mutableStateOf<Account?>(null) }
+            var remove by remember { mutableStateOf<Account?>(null) }
+            var quick by remember { mutableStateOf(false) }
+            var busy by remember { mutableStateOf(false) }
+            // In the app's scope: it has to finish even if this page goes away meanwhile.
+            fun use(a: Account) {
+                busy = true
+                app.scope.launch(Dispatchers.Main) {
+                    app.useAccount(a)
+                    nav.tab(Route.Home)
+                }
+            }
+            fun line(server: String?, address: String?, inUse: Boolean = false) =
+                listOfNotNull(server ?: "Jellyfin", address?.let { addressKind(it).name }, "In use".takeIf { inUse }).joinToString(" · ")
+            Row2(p.userName ?: "", line(p.serverName, app.api.active, true))
+            others.forEach { a ->
+                Row2(a.userName ?: "", line(a.serverName, a.active ?: a.addresses.firstOrNull()?.url), { if (!busy) { if (Playback.active) switchTo = a else use(a) } }) {
+                    IconButton({ remove = a }, enabled = !busy) { Icon(Icons.Rounded.Delete, "Remove account") }
+                }
+            }
+            Row2("Add account", "Another server, or another user on this one", { nav.go(Route.AddAccount) }) { Icon(Icons.Rounded.ChevronRight, null, tint = Faint) }
+            Row2("Approve a Quick Connect code", "Signs in another device as ${p.userName ?: "you"}", { quick = true })
+            switchTo?.let { a ->
+                AlertDialog(
+                    { switchTo = null },
+                    title = { Text("Switch to ${a.userName ?: "this account"}?") },
+                    text = { Text("This stops what's playing.") },
+                    confirmButton = { TextButton({ switchTo = null; use(a) }) { Text("Switch") } },
+                    dismissButton = { TextButton({ switchTo = null }) { Text("Cancel") } },
+                )
+            }
+            remove?.let { a ->
+                AlertDialog(
+                    { remove = null },
+                    title = { Text("Remove ${a.userName ?: "this account"} on ${a.serverName ?: "Jellyfin"}?") },
+                    text = { Text("This device is signed out of that account. Its downloads stay on this device.") },
+                    confirmButton = {
+                        TextButton({
+                            remove = null
+                            others = p.otherAccounts.filterNot { it.same(a) }
+                            p.otherAccounts = others
+                            app.revoke(a)
+                        }) { Text("Remove") }
+                    },
+                    dismissButton = { TextButton({ remove = null }) { Text("Cancel") } },
+                )
+            }
+            if (quick) QuickConnectDialog { quick = false }
             Row2("Server addresses", "${p.addresses.size} ways to reach this server · automatic switching", { nav.go(Route.Addresses) }) { Icon(Icons.Rounded.ChevronRight, null, tint = Faint) }
             Row2("Your devices", "See what your other devices are playing and continue here", { nav.go(Route.Devices) }) { Icon(Icons.Rounded.ChevronRight, null, tint = Faint) }
-            Row2("Sign out", "Downloads stay on this device", { confirmLogout = true })
+            Row2("Sign out", if (others.isEmpty()) "Downloads stay on this device" else "Continues with ${others[0].userName ?: "the next account"} on ${others[0].serverName ?: "Jellyfin"}", { confirmLogout = true })
         }
         SettingsSection.Home -> {
             var enabled by remember { mutableStateOf(p.homeSections) }
@@ -298,7 +351,7 @@ private fun SettingsContent(section: SettingsSection) {
                 app.playback.stop()
                 scope.launch {
                     app.api.logout()
-                    app.signOut()
+                    app.signOut()?.let { it.join(); nav.tab(Route.Home) }
                 }
             }) { Text("Sign out") }
         },
@@ -309,6 +362,53 @@ private fun SettingsContent(section: SettingsSection) {
         title = { Text("Delete all downloads?") },
         confirmButton = { TextButton({ app.downloads.removeAll(); confirmDeleteAll = false }) { Text("Delete") } },
         dismissButton = { TextButton({ confirmDeleteAll = false }) { Text("Cancel") } },
+    )
+}
+
+@Composable
+private fun QuickConnectDialog(onDismiss: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var code by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var done by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    AlertDialog(
+        onDismiss,
+        title = { Text("Approve a Quick Connect code") },
+        text = {
+            if (done) Text("Signed in on the other device") else Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Type the code the other device shows. It signs in as you, on this server.", style = MaterialTheme.typography.bodySmall)
+                OutlinedTextField(
+                    code, { v -> code = v.filter { it.isDigit() }; error = null }, label = { Text("Code") }, singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+            }
+        },
+        confirmButton = {
+            if (done) TextButton(onDismiss) { Text("Close") } else TextButton(
+                {
+                    busy = true
+                    scope.launch {
+                        try {
+                            App.it.api.quickConnectAuthorize(code)
+                            done = true
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            error = when ((e as? ApiException)?.code) {
+                                404 -> "That code isn't valid or has expired. Check it on the other device."
+                                401, 403 -> "Quick Connect is turned off on this server"
+                                else -> loadError(e)
+                            }
+                        }
+                        busy = false
+                    }
+                },
+                enabled = code.isNotBlank() && !busy,
+            ) { Text(if (busy) "Checking…" else "Approve") }
+        },
+        dismissButton = { if (!done) TextButton(onDismiss) { Text("Cancel") } },
     )
 }
 

@@ -54,6 +54,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import xyz.yuuki.novafin.Account
 import xyz.yuuki.novafin.Address
 import xyz.yuuki.novafin.AddressKind
 import xyz.yuuki.novafin.Api
@@ -74,6 +76,8 @@ import xyz.yuuki.novafin.normalizeAddress
 fun LoginScreen(adding: Boolean = false) {
     val app = App.it
     val scope = rememberCoroutineScope()
+    // Only the shell has navigation; the signed-out login screen is on its own.
+    val nav = if (adding) LocalNav.current else null
     var address by rememberSaveable { mutableStateOf("") }
     var server by remember { mutableStateOf<Pair<String, ServerInfo>?>(null) }
     var user by rememberSaveable { mutableStateOf("") }
@@ -93,30 +97,30 @@ fun LoginScreen(adding: Boolean = false) {
         searching = false
     }
 
-    fun finish(url: String, info: ServerInfo, login: Api.Login) = scope.launch {
+    // In the app's scope: signing in removes this screen, and with it the screen's own scope.
+    suspend fun finish(url: String, info: ServerInfo, login: Api.Login) = app.scope.launch(Dispatchers.Main) {
         val p = app.prefs
-        p.serverId = info.id
-        p.serverName = info.name
-        p.serverVersion = info.version
-        p.token = login.token
-        p.userId = login.userId
-        p.userName = login.userName
-        p.addresses = listOf(Address(url, addressKind(url).name))
-        p.active = url
+        // Signing in again as a saved user keeps that account's addresses and only renews the token.
+        val known = (listOfNotNull(p.account) + p.otherAccounts).firstOrNull { it.serverId == info.id && it.userId == login.userId }
+        val here = Address(url, addressKind(url).name)
+        app.useAccount(
+            Account(
+                info.id, info.name, info.version, login.userId, login.userName, login.token,
+                known?.addresses?.let { l -> if (l.any { it.url == url }) l else l + here } ?: listOf(here), url, known?.pinned,
+            ),
+        )
         // The server's own LAN address, when it is a different way in and really the same server.
         // Checked in the background: away from home it would only hold up signing in until it times out.
         info.localAddress?.let(::normalizeAddress)?.takeIf { it != url }?.let { local ->
             app.scope.launch(Dispatchers.IO) {
-                if (runCatching { Api.publicInfo(local).id == info.id }.getOrDefault(false)) {
+                if (runCatching { Api.publicInfo(local).id == info.id }.getOrDefault(false) && p.serverId == info.id && p.addresses.none { it.url == local }) {
                     p.addresses = listOf(Address(local, addressKind(local).name)) + p.addresses
                     app.api.pickBest()
                 }
             }
         }
-        app.api.reconnect()
-        runCatching { app.api.loadUserConfig() }
-        app.loggedIn.value = true
-    }
+        if (adding) nav?.tab(Route.Home)
+    }.join()
 
     fun connect(raw: String = address) {
         busy = true
@@ -169,12 +173,16 @@ fun LoginScreen(adding: Boolean = false) {
         Modifier.fillMaxSize().safeDrawingPadding().imePadding().verticalScroll(rememberScrollState()).padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        if (adding) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            IconButton({ nav?.back() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }
+            Text("Add account", Modifier.padding(start = 12.dp), style = MaterialTheme.typography.headlineSmall)
+        }
         Column(Modifier.widthIn(max = 420.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Image(painterResource(R.mipmap.ic_launcher_foreground), null, Modifier.padding(top = 32.dp).size(112.dp).clip(RoundedCornerShape(28.dp)))
             Text("Novafin", style = MaterialTheme.typography.displaySmall)
             val s = server
             if (s == null) {
-                Text("Connect to your Jellyfin server", style = MaterialTheme.typography.bodyMedium, color = Sub, textAlign = TextAlign.Center)
+                Text(if (adding) "Connect to another server, or to this one as another user" else "Connect to your Jellyfin server", style = MaterialTheme.typography.bodyMedium, color = Sub, textAlign = TextAlign.Center)
                 val problem = addressProblem(address)
                 OutlinedTextField(
                     address, { address = it; error = null }, Modifier.fillMaxWidth(), label = { Text("Server address") },
