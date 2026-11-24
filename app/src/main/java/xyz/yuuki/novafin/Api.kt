@@ -308,6 +308,9 @@ class Api(private val prefs: Prefs, private val scope: CoroutineScope, private v
         return org.json.JSONArray(body).objects().map(Session::from).filter { it.deviceId != prefs.deviceId }
     }
 
+    /** Pause, Unpause or Stop on another session; only works where it reports SupportsRemoteControl. */
+    suspend fun sessionCommand(sessionId: String, command: String) { post("/Sessions/$sessionId/Playing/$command") }
+
     suspend fun recommendations(parentId: String?, categories: Int = 3): List<Recommendation> {
         val body = send(Request.Builder().url(url("/Movies/Recommendations", "userId" to prefs.userId, "parentId" to parentId, "categoryLimit" to categories, "itemLimit" to 12, "fields" to listFields)).build())
         return org.json.JSONArray(body).objects().map(Recommendation::from).filter { it.items.isNotEmpty() }
