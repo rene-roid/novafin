@@ -332,5 +332,5 @@ Each step ends with a building app, tested on the phone emulator, a tablet emula
 ## 8. Not planned
 
 - Music, photos, books, live TV
-- SyncPlay, multiple saved servers, Android TV leanback UI
+- Android TV leanback UI, public join-by-link rooms for people without an account (see IMPROVEMENT_PLAN.md §3.8)
 - Syncing remembered track choices across devices through the server's display preferences (possible later)
